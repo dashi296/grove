@@ -47,6 +47,12 @@ plugins/
 │   └── src/
 │       ├── index.ts
 │       └── r2-provider.ts
+├── sync-icloud/
+│   ├── package.json
+│   ├── grove-plugin.json
+│   └── src/
+│       ├── index.ts
+│       └── icloud-provider.ts
 └── ai/
     ├── package.json
     ├── grove-plugin.json
@@ -58,14 +64,10 @@ plugins/
 ## プラグイン化するもの
 
 - Cloudflare R2
+- iCloud Drive
+  - 通常のクラウド API ではなく、host 側 file provider を使うフォルダ共有方式で実装する
 - AI 機能
 - 将来的な外部連携
-
-保留または host 提供側で扱うもの:
-
-- iCloud Drive
-  - 通常の remote storage plugin ではなく、platform file provider として app host 側で扱う可能性が高い
-  - `PluginHostServices` と host API の整理後に最終判断する
 
 ## プラグイン化しないもの
 
@@ -87,7 +89,8 @@ plugins/
 ### Phase 2
 
 - R2 プラグイン
-- iCloud の host file provider 方針確定
+- iCloud Drive プラグイン
+- iCloud 向け host file provider 境界
 
 ### Phase 3
 

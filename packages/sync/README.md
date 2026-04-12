@@ -6,7 +6,7 @@
 暗号化、差分計算、競合解決、キュー制御を担当し、具体的なストレージ実装には依存しません。
 
 このパッケージは `packages/core` の `SyncProvider` 契約と host 抽象を使います。
-Cloudflare R2 のようなリモートストレージ実装は `plugins/*` 側に置きます。iCloud のような platform file provider は通常の remote sync plugin と分けて扱います。
+Cloudflare R2 や iCloud Drive のような同期実装は `plugins/*` 側に置きます。iCloud は通常のクラウド API ではなくプラットフォームのフォルダ共有方式で扱うため、`sync-icloud` プラグインが host 側の file provider 抽象を利用します。
 
 ## 責務
 
