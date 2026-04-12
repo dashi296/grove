@@ -115,11 +115,6 @@ apps/mobile/
 │   ├── model/
 │   ├── ui/
 │   └── styles/
-├── widgets/
-│   ├── bottom-tabs/
-│   ├── editor-toolbar/
-│   ├── note-list/
-│   └── sync-banner/
 └── modules/
     ├── file-access/
     ├── secure-storage/
@@ -133,7 +128,7 @@ apps/mobile/
 - `features` はキャプチャ、検索、編集、プラグイン導入、Vault 切り替えのような操作単位を置く
 - `entities` はドメイン単位の表示モジュールを置く
 - `shared` はアダプタ、デザイントークン、バリデーション、低レベル UI、汎用ユーティリティを置く
-- `widgets` はノート一覧ブロックや同期バナーのような大きめの再利用 UI を置く
+- bottom tab のようなナビゲーション部品は `app` 配下、ノート一覧や同期バナーのような大きめの UI は責務に応じて `pages`、`features`、`entities` に置く
 - `modules` はカスタムネイティブブリッジや Expo module ラッパーの唯一の配置先とする
 
 ## ナビゲーション方針

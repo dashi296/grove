@@ -108,10 +108,6 @@ apps/desktop/
 │   │   ├── model/
 │   │   ├── ui/
 │   │   └── styles/
-│   └── widgets/
-│       ├── sidebar/
-│       ├── note-pane/
-│       └── titlebar/
 └── src-tauri/
     ├── Cargo.toml
     ├── tauri.conf.json
@@ -134,11 +130,11 @@ apps/desktop/
 ## 構成ルール
 
 - `src/app` はルーティング、Provider、トップレベル初期化のみを置く
-- `src/pages` は `features`、`entities`、`widgets` を組み合わせて画面を構成する
+- `src/pages` は `features`、`entities`、`shared` を組み合わせて画面を構成する
 - `src/features` はノートを開く、タブを移動する、プラグインを導入する、Vault を選ぶといったユーザー操作単位を置く
 - `src/entities` は `Note`、`Tag`、`Plugin` などのドメイン単位の UI モジュールを置く
 - `src/shared` は低レベル UI、ラッパー、アダプタ、スキーマ、ユーティリティを置く
-- `src/widgets` はサイドバーやペイン枠など、画面の大きな再利用ブロックに使う
+- ペイン枠やサイドバーのような大きな画面部品は、画面固有なら `src/pages` 配下、操作単位として再利用するなら `src/features` 配下に置く
 - `src-tauri` では同期ポリシーや Markdown ドメインロジックを持たず、ネイティブ機能の公開だけを担当する
 
 ## ルーティング方針

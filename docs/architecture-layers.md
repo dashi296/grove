@@ -51,13 +51,13 @@ plugins/* ──────> PluginHostServices
 
 ## 設計資料
 
-- `apps/desktop`: [apps/desktop/README.md](/Users/shunokada/projects/grove/apps/desktop/README.md:1)
-- `apps/mobile`: [apps/mobile/README.md](/Users/shunokada/projects/grove/apps/mobile/README.md:1)
-- `packages/core`: [packages/core/README.md](/Users/shunokada/projects/grove/packages/core/README.md:1)
-- `packages/db`: [packages/db/README.md](/Users/shunokada/projects/grove/packages/db/README.md:1)
-- `packages/sync`: [packages/sync/README.md](/Users/shunokada/projects/grove/packages/sync/README.md:1)
-- `packages/editor`: [packages/editor/README.md](/Users/shunokada/projects/grove/packages/editor/README.md:1)
-- `plugins`: [plugins/README.md](/Users/shunokada/projects/grove/plugins/README.md:1)
+- `apps/desktop`: [apps/desktop/README.md](../apps/desktop/README.md)
+- `apps/mobile`: [apps/mobile/README.md](../apps/mobile/README.md)
+- `packages/core`: [packages/core/README.md](../packages/core/README.md)
+- `packages/db`: [packages/db/README.md](../packages/db/README.md)
+- `packages/sync`: [packages/sync/README.md](../packages/sync/README.md)
+- `packages/editor`: [packages/editor/README.md](../packages/editor/README.md)
+- `plugins`: [plugins/README.md](../plugins/README.md)
 
 ## 注意点
 
