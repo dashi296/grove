@@ -3,9 +3,9 @@
   "private": true,
   "packageManager": "pnpm@9.12.0",
   "scripts": {
-    "dev:desktop": "pnpm --filter @grove/desktop dev",
+    "dev:desktop": "pnpm --filter @grove/desktop tauri:dev",
     "dev:mobile": "pnpm --filter @grove/mobile dev",
-    "build:desktop": "pnpm --filter @grove/desktop build",
+    "build:desktop": "pnpm --filter @grove/desktop tauri:build",
     "build:mobile": "pnpm --filter @grove/mobile build",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",

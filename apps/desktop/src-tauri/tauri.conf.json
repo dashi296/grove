@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "app.grove.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --dir ../.. dev:desktop",
-    "beforeBuildCommand": "pnpm --dir ../.. build:desktop",
+    "beforeDevCommand": "pnpm --dir ../.. --filter @grove/desktop dev",
+    "beforeBuildCommand": "pnpm --dir ../.. --filter @grove/desktop build",
     "frontendDist": "../dist"
   },
   "app": {
