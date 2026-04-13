@@ -35,17 +35,17 @@
 ### 初期実装で採用するライブラリ
 
 - `@tauri-apps/api`
-- `react-router-dom`
+- `@tanstack/react-router`
 - `zustand`
 - `@tanstack/react-query`
-- `zod`
+- `valibot`
 
 ## 責務境界
 
 デスクトップが持つ責務:
 
 - ウィンドウレイアウト、ペイン、タブ、ダイアログ、キーボードショートカット
-- Vault 選択と Tauri 経由のローカルファイルシステム操作
+- Workspace 選択と Tauri 経由のローカルファイルシステム操作
 - 検索 UI とノート一覧 UI
 - プラグインストアとプラグイン設定 UI
 - フロントエンドから Rust command への橋渡し
@@ -93,7 +93,7 @@ apps/desktop/
 │   │   ├── note-tabs/
 │   │   ├── pane-layout/
 │   │   ├── plugin-install/
-│   │   └── vault-picker/
+│   │   └── workspace-picker/
 │   ├── entities/
 │   │   ├── note/
 │   │   ├── tag/
@@ -115,7 +115,7 @@ apps/desktop/
         ├── main.rs
         ├── commands/
         │   ├── file_system.rs
-        │   ├── vault.rs
+        │   ├── workspace.rs
         │   ├── keychain.rs
         │   └── search.rs
         ├── services/
@@ -131,7 +131,7 @@ apps/desktop/
 
 - `src/app` はルーティング、Provider、トップレベル初期化のみを置く
 - `src/pages` は `features`、`entities`、`shared` を組み合わせて画面を構成する
-- `src/features` はノートを開く、タブを移動する、プラグインを導入する、Vault を選ぶといったユーザー操作単位を置く
+- `src/features` はノートを開く、タブを移動する、プラグインを導入する、Workspace を選ぶといったユーザー操作単位を置く
 - `src/entities` は `Note`、`Tag`、`Plugin` などのドメイン単位の UI モジュールを置く
 - `src/shared` は低レベル UI、ラッパー、アダプタ、スキーマ、ユーティリティを置く
 - ペイン枠やサイドバーのような大きな画面部品は、画面固有なら `src/pages` 配下、操作単位として再利用するなら `src/features` 配下に置く
@@ -146,14 +146,14 @@ apps/desktop/
 - `/settings` はアプリ設定
 - `/plugins` はプラグインストアとインストール済みプラグイン管理
 
-Vault 切り替えや競合解決のようなモーダル中心のフローは、深い URL が必要になるまではページ状態で扱います。
+Workspace 切り替えや競合解決のようなモーダル中心のフローは、深い URL が必要になるまではページ状態で扱います。
 
 ## デスクトップの状態設計
 
 主要な Zustand ストア:
 
 - `useNoteStore`: ペイン、タブ、アクティブノート状態
-- `useWorkspaceStore`: 選択中 Vault とワークスペース設定
+- `useWorkspaceStore`: 選択中 workspace とワークスペース設定
 - `usePluginStore`: インストール済みプラグインと関連 UI 状態
 - `useUiStore`: モーダル、サイドバー、コマンドパレット状態
 
@@ -169,9 +169,12 @@ Query 境界:
 フロントエンドは `src/shared/api/commands.ts` の小さく型付けされた command 層だけを呼びます。
 生の `invoke()` をアプリ全体に散らさない方針です。
 
+ルーティングは `@tanstack/react-router` を前提にし、ページとデータ境界を型付きで扱います。
+ネイティブ応答や設定値の runtime validation には `valibot` を使います。
+
 初期 command グループ:
 
-- Vault 管理
+- Workspace 管理
 - ファイル読み書き
 - ファイル監視購読
 - SQLite インデックス更新
@@ -184,7 +187,7 @@ Query 境界:
 
 - Tauri シェル
 - React アプリ初期化
-- Vault 選択
+- Workspace 選択
 - ローカルファイル読み書き
 - 単一ペインのノート編集画面
 

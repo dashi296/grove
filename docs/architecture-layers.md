@@ -28,8 +28,8 @@ packages/editor───> packages/core
 app host 境界:
 
 ```text
-apps/* ─────> VaultIO / PluginHostServices
-packages/sync ──> VaultIO または同期入力 snapshot
+apps/* ─────> WorkspaceIO / PluginHostServices
+packages/sync ──> WorkspaceIO または同期入力 snapshot
 packages/db ────> LinkResolver を使った index orchestration
 plugins/* ──────> PluginHostServices
 ```
@@ -65,4 +65,4 @@ plugins/* ──────> PluginHostServices
 - SQLite は再構築可能な派生 index
 - WikiLink はコア機能でありプラグイン化しない
 - `SyncProvider` 実装はプラグインへ置く
-- `VaultIO`、`PluginHostServices`、`LinkResolver` を app-host 境界の基本抽象とする
+- `WorkspaceIO`、`PluginHostServices`、`LinkResolver` を app-host 境界の基本抽象とする

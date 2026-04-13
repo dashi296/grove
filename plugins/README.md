@@ -65,7 +65,7 @@ plugins/
 
 - Cloudflare R2
 - iCloud Drive
-  - 通常のクラウド API ではなく、host 側 file provider を使うフォルダ共有方式で実装する
+  - 通常のクラウド API ではなく、host 側 workspace file provider を使うフォルダ共有方式で実装する
 - AI 機能
 - 将来的な外部連携
 
@@ -90,7 +90,7 @@ plugins/
 
 - R2 プラグイン
 - iCloud Drive プラグイン
-- iCloud 向け host file provider 境界
+- iCloud 向け host workspace file provider 境界
 
 ### Phase 3
 

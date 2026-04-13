@@ -6,7 +6,7 @@
 暗号化、差分計算、競合解決、キュー制御を担当し、具体的なストレージ実装には依存しません。
 
 このパッケージは `packages/core` の `SyncProvider` 契約と host 抽象を使います。
-Cloudflare R2 や iCloud Drive のような同期実装は `plugins/*` 側に置きます。iCloud は通常のクラウド API ではなくプラットフォームのフォルダ共有方式で扱うため、`sync-icloud` プラグインが host 側の file provider 抽象を利用します。
+Cloudflare R2 や iCloud Drive のような同期実装は `plugins/*` 側に置きます。iCloud は通常のクラウド API ではなくプラットフォームのフォルダ共有方式で扱うため、`sync-icloud` プラグインが host 側の workspace file provider 抽象を利用します。
 
 ## 責務
 
@@ -15,13 +15,13 @@ Cloudflare R2 や iCloud Drive のような同期実装は `plugins/*` 側に置
 - 同期キューの実行
 - 競合検出と競合解決戦略
 - `SyncProvider` 経由での upload / download / list / delete 実行
-- `VaultIO` または同期入力スナップショット経由でローカルノート実体へアクセス
+- `WorkspaceIO` または同期入力スナップショット経由でローカルノート実体へアクセス
 
 ## 責務外
 
 - ストレージ API 固有実装
 - SQLite の直接参照
-- Vault の正本管理
+- workspace の正本管理
 - UI 表示
 
 ## 依存ルール
@@ -60,7 +60,7 @@ packages/sync/
     │   ├── applyRemoteChanges.ts
     │   └── conflictResolution.ts
     ├── inputs/
-    │   ├── vaultIoSource.ts
+    │   ├── workspaceIoSource.ts
     │   ├── snapshotSource.ts
     │   └── types.ts
     ├── crypto/
@@ -85,7 +85,7 @@ packages/sync/
 
 入力:
 
-- `VaultIO` または app 層が収集した同期入力スナップショット
+- `WorkspaceIO` または app 層が収集した同期入力スナップショット
 - `SyncProvider`
 - 秘密鍵または暗号化コンテキスト
 
@@ -106,7 +106,7 @@ packages/sync/
 
 app 層は以下を担当します。
 
-- `VaultIO` 実装の提供、または同期入力スナップショットの構築
+- `WorkspaceIO` 実装の提供、または同期入力スナップショットの構築
 - ローカルファイル読み書き
 - 秘密鍵へのアクセス
 - 同期状態 UI
@@ -120,7 +120,7 @@ app 層は以下を担当します。
 `packages/sync` がファイル一覧だけを受け取る設計にはしません。
 暗号化 upload には実体バイト列が必要なため、以下のどちらかを必須にします。
 
-- `VaultIO` を受け取り必要時に read する
+- `WorkspaceIO` を受け取り必要時に read する
 - app 層が `{ path, hash, updatedAt, bytes }` を揃えた同期入力を渡す
 
 ## 競合方針
@@ -136,7 +136,7 @@ app 層は以下を担当します。
 
 ### Phase 1
 
-- `VaultIO` または snapshot 入力で動く最小同期
+- `WorkspaceIO` または snapshot 入力で動く最小同期
 - 暗号化
 - upload / download 基本フロー
 
@@ -150,4 +150,4 @@ app 層は以下を担当します。
 
 - リトライポリシー
 - バックグラウンド同期最適化
-- 部分同期や大規模 Vault 対応
+- 部分同期や大規模 workspace 対応
