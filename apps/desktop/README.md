@@ -15,7 +15,7 @@
 - Tauri v2
 - React 19
 - TypeScript `strict: true`
-- Tauri のフロントエンドビルドに Vite を使用
+- Tauri のフロントエンドに TanStack Start を使用
 - ローカル UI 状態管理に Zustand
 - 非同期境界にのみ TanStack Query を使用
 
@@ -35,6 +35,7 @@
 ### 初期実装で採用するライブラリ
 
 - `@tauri-apps/api`
+- `@tanstack/react-start`
 - `@tanstack/react-router`
 - `zustand`
 - `@tanstack/react-query`
@@ -70,23 +71,20 @@ apps/desktop/
 ├── src/
 │   ├── main.tsx
 │   ├── app/
-│   │   ├── App.tsx
 │   │   ├── providers/
-│   │   │   ├── RouterProvider.tsx
+│   │   │   ├── AppProvider.tsx
 │   │   │   ├── QueryProvider.tsx
 │   │   │   └── ThemeProvider.tsx
-│   │   └── routes/
-│   │       ├── index.tsx
-│   │       ├── editor.tsx
-│   │       ├── settings.tsx
-│   │       └── plugins.tsx
-│   ├── pages/
-│   │   ├── editor/
-│   │   │   └── EditorPage.tsx
-│   │   ├── settings/
-│   │   │   └── SettingsPage.tsx
-│   │   └── plugins/
-│   │       └── PluginsPage.tsx
+│   │   └── shell/
+│   │       ├── AppFrame.tsx
+│   │       ├── Sidebar.tsx
+│   │       └── WorkspaceGate.tsx
+│   ├── routes/
+│   │   ├── __root.tsx
+│   │   ├── index.tsx
+│   │   ├── editor.tsx
+│   │   ├── settings.tsx
+│   │   └── plugins.tsx
 │   ├── features/
 │   │   ├── note-open/
 │   │   ├── note-search/
@@ -129,12 +127,12 @@ apps/desktop/
 
 ## 構成ルール
 
-- `src/app` はルーティング、Provider、トップレベル初期化のみを置く
-- `src/pages` は `features`、`entities`、`shared` を組み合わせて画面を構成する
+- `src/app` は Provider、アプリ共通 shell、トップレベル初期化のみを置く
+- `src/routes` は TanStack Start / TanStack Router の route file と route-level loader を置く
 - `src/features` はノートを開く、タブを移動する、プラグインを導入する、Workspace を選ぶといったユーザー操作単位を置く
 - `src/entities` は `Note`、`Tag`、`Plugin` などのドメイン単位の UI モジュールを置く
 - `src/shared` は低レベル UI、ラッパー、アダプタ、スキーマ、ユーティリティを置く
-- ペイン枠やサイドバーのような大きな画面部品は、画面固有なら `src/pages` 配下、操作単位として再利用するなら `src/features` 配下に置く
+- route file に過剰な UI 実装を溜めず、画面の composition は `src/app` の shell と `src/features`、`src/entities`、`src/shared` の組み合わせで表現する
 - `src-tauri` では同期ポリシーや Markdown ドメインロジックを持たず、ネイティブ機能の公開だけを担当する
 
 ## ルーティング方針
@@ -146,7 +144,7 @@ apps/desktop/
 - `/settings` はアプリ設定
 - `/plugins` はプラグインストアとインストール済みプラグイン管理
 
-Workspace 切り替えや競合解決のようなモーダル中心のフローは、深い URL が必要になるまではページ状態で扱います。
+Workspace 切り替えや競合解決のようなモーダル中心のフローは、深い URL が必要になるまでは route 配下の UI 状態で扱います。
 
 ## デスクトップの状態設計
 
@@ -169,7 +167,7 @@ Query 境界:
 フロントエンドは `src/shared/api/commands.ts` の小さく型付けされた command 層だけを呼びます。
 生の `invoke()` をアプリ全体に散らさない方針です。
 
-ルーティングは `@tanstack/react-router` を前提にし、ページとデータ境界を型付きで扱います。
+ルーティングは TanStack Start / TanStack Router を前提にし、route とデータ境界を型付きで扱います。
 ネイティブ応答や設定値の runtime validation には `valibot` を使います。
 
 初期 command グループ:
