@@ -219,6 +219,22 @@ feature 層に生のプラットフォーム分岐を散らさない方針です
 - クイックキャプチャの改善
 - 共有と取り込み導線
 
+## 検証手順
+
+依存解決と monorepo 解決の確認は monorepo ルートから行います。
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm dev:mobile
+```
+
+確認ポイント:
+
+- mobile app から `@grove/core` の public export を import できること
+- Expo Router の初期画面と workspace 遷移画面が表示されること
+- `app`、`app.providers`、`features`、`entities`、`shared`、`modules` の責務分割が保たれていること
+
 ## 未確定事項
 
 - ファイルアクセスを完全共通モジュールで吸収するか、内部的には iOS / Android アダプタを分けるか

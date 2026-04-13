@@ -1,0 +1,48 @@
+export const appName = "Grove";
+
+export type NoteLink = {
+  fromId: string;
+  toId: string;
+  alias: string | null;
+};
+
+export type Note = {
+  id: string;
+  title: string;
+  content: string;
+  filePath: string;
+  tags: string[];
+  links: NoteLink[];
+  createdAt: Date;
+  updatedAt: Date;
+  syncedAt: Date | null;
+};
+
+export type SyncEntry = {
+  path: string;
+  hash: string;
+  updatedAt: Date;
+  size: number;
+};
+
+export interface SyncProvider {
+  readonly id: string;
+  readonly name: string;
+  upload(path: string, data: Uint8Array): Promise<void>;
+  download(path: string): Promise<Uint8Array>;
+  list(prefix?: string): Promise<SyncEntry[]>;
+  delete(path: string): Promise<void>;
+  isAvailable(): Promise<boolean>;
+}
+
+export type GrovePlugin = {
+  id: string;
+  name: string;
+  provides: {
+    syncProvider?: SyncProvider;
+  };
+};
+
+export function definePlugin(plugin: GrovePlugin): GrovePlugin {
+  return plugin;
+}

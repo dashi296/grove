@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "nativewind/types"
+    ]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "app.providers/**/*.ts",
+    "app.providers/**/*.tsx",
+    "features/**/*.ts",
+    "features/**/*.tsx",
+    "entities/**/*.ts",
+    "entities/**/*.tsx",
+    "shared/**/*.ts",
+    "shared/**/*.tsx",
+    "modules/**/*.ts",
+    "modules/**/*.tsx",
+    "nativewind-env.d.ts",
+    "babel.config.js",
+    "metro.config.js"
+  ]
+}
