@@ -48,6 +48,12 @@ SQLite FTS5による全文検索を計画しており、日本語を含むノー
 - プラグイン層の設計は `plugins/README.md` にあり、詳細な manifest 仕様は今後 `docs/` に追加予定です
 - READMEにあるロードマップやプラグイン一覧は、現時点では計画であり提供済み機能ではありません
 
+## 開発方針
+
+- JavaScript / TypeScript 系の lint は monorepo ルートで `oxlint` を基準に運用します
+- JavaScript / TypeScript 系の format は monorepo ルートで `oxfmt` を基準に運用します
+- app / package 個別の README ではなく、monorepo 全体の共通品質ルールとして管理します
+
 ---
 
 ## 対応プラットフォーム
