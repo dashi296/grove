@@ -18,6 +18,8 @@
 - Tauri のフロントエンドに TanStack Start を使用
 - ローカル UI 状態管理に Zustand
 - 非同期境界にのみ TanStack Query を使用
+- TypeScript / TSX の lint に `oxlint` を使用
+- TypeScript / TSX の format に `oxfmt` を使用
 
 ### エディタとデータ
 
@@ -39,6 +41,8 @@
 - `@tanstack/react-router`
 - `zustand`
 - `@tanstack/react-query`
+- `oxlint`
+- `oxfmt`
 - `valibot`
 
 ## 責務境界
