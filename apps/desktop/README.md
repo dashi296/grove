@@ -70,7 +70,11 @@ apps/desktop/
 ├── src/
 │   ├── main.tsx
 │   ├── app/
-│   │   └── App.tsx
+│   │   ├── App.tsx
+│   │   ├── router.tsx
+│   │   └── routes/
+│   │       ├── __root.tsx
+│   │       └── index.tsx
 │   ├── features/
 │   │   ├── note-open/
 │   │   ├── note-search/
@@ -106,7 +110,7 @@ apps/desktop/
 
 ## 構成ルール
 
-- `src/app` はアプリ共通 shell とトップレベル初期化のみを置く
+- `src/app` はアプリ共通 shell、TanStack Router の route file、トップレベル初期化のみを置く
 - `src/features` はノートを開く、タブを移動する、プラグインを導入する、Workspace を選ぶといったユーザー操作単位を置く
 - `src/entities` は `Note`、`Tag`、`Plugin` などのドメイン単位の UI モジュールを置く
 - `src/shared` は低レベル UI、ラッパー、アダプタ、スキーマ、ユーティリティを置く
@@ -134,7 +138,7 @@ Query 境界:
 フロントエンドは `src/shared/api/commands.ts` の小さく型付けされた command 層だけを呼びます。
 生の `invoke()` をアプリ全体に散らさない方針です。
 
-フロントエンドは Vite + React の単純な SPA shell から始め、必要な画面分割は後続 issue で追加します。
+フロントエンドは Vite + React + TanStack Router の単純な SPA shell から始め、必要な画面分割は後続 issue で追加します。
 ネイティブ応答や設定値の runtime validation には `valibot` を使います。
 
 初期 command グループ:
@@ -188,4 +192,4 @@ pnpm dev:desktop
 
 - `@grove/core` の public export を desktop 側から import できること
 - desktop shell が起動し、Grove branding の最小画面が表示されること
-- `apps/desktop/src/app` を入口にしつつ、UI 共通部品が `shared/ui` に分かれていること
+- `apps/desktop/src/app/routes` を route file の入口にしつつ、UI 共通部品が `shared/ui` に分かれていること

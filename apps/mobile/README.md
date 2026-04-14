@@ -92,9 +92,8 @@ apps/mobile/
 │   │   └── index.tsx
 │   └── workspace/
 │       └── select.tsx
-├── app.providers/
-│   ├── QueryProvider.tsx
-│   └── SafeAreaProvider.tsx
+├── providers/
+│   └── AppProviders.tsx
 ├── features/
 │   ├── note-capture/
 │   ├── note-search/
@@ -116,21 +115,17 @@ apps/mobile/
 │   ├── model/
 │   ├── ui/
 │   └── styles/
-└── modules/
-    ├── file-access/
-    ├── secure-storage/
-    └── sqlite/
 ```
 
 ## 構成ルール
 
 - `app` は Expo Router のファイルベースルーティング境界であり、route file と screen composition を担う
-- `app.providers` は Router 外側で共有する Provider を置く
+- `providers` は Router 外側で共有する Provider を置く
 - `features` はキャプチャ、検索、編集、プラグイン導入、workspace 切り替えのような操作単位を置く
 - `entities` はドメイン単位の表示モジュールを置く
 - `shared` はアダプタ、デザイントークン、バリデーション、低レベル UI、汎用ユーティリティを置く
 - tabs や stack 設定のようなルーティング定義は `app` 配下に置き、route file が重くなりそうな場合でも分解先は `features`、`entities`、`shared` を優先する
-- `modules` はカスタムネイティブブリッジや Expo module ラッパーの唯一の配置先とする
+- ネイティブブリッジや Expo module ラッパーは、用途に応じて `shared/api` または専用の `shared/native` に置く
 
 ## ナビゲーション方針
 
@@ -177,7 +172,7 @@ Query 境界:
 
 ## ネイティブ境界
 
-JavaScript 側は `shared/api` と `modules` の型付きラッパー経由でのみネイティブ機能へアクセスします。
+JavaScript 側は `shared/api` または `shared/native` の型付きラッパー経由でのみネイティブ機能へアクセスします。
 feature 層に生のプラットフォーム分岐を散らさない方針です。
 
 初期ネイティブ関心事:
@@ -233,7 +228,7 @@ pnpm dev:mobile
 
 - mobile app から `@grove/core` の public export を import できること
 - Expo Router の初期画面と workspace 遷移画面が表示されること
-- `app`、`app.providers`、`features`、`entities`、`shared`、`modules` の責務分割が保たれていること
+- `app`、`providers`、`features`、`entities`、`shared` の責務分割が保たれていること
 
 ## 未確定事項
 
