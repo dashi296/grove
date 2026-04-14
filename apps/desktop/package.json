@@ -8,6 +8,7 @@
     "build": "vite build",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
