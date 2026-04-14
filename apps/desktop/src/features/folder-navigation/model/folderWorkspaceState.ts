@@ -97,6 +97,10 @@ export function renameFolderInWorkspace(
   sourceFolderPath: FolderPath,
   targetFolderPath: FolderScope,
 ): FolderWorkspaceMutation {
+  if (targetFolderPath !== null && isDescendantFolderPath(targetFolderPath, sourceFolderPath)) {
+    throw new Error("Choose a folder outside the selected folder.");
+  }
+
   const affectedNoteIds: string[] = [];
   const notes = state.notes.map((note) => {
     const nextPath = renameFolderInNotePath(note.path, sourceFolderPath, targetFolderPath);

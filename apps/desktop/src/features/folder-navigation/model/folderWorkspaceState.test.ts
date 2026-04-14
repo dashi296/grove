@@ -86,4 +86,14 @@ describe("renameFolderInWorkspace", () => {
     expect(result.state.expandedFolderPaths).toStrictEqual(["Projects", "Research"]);
     expect(result.state.selectedFolderPath).toBeNull();
   });
+
+  it("rejects moving a folder into its own descendant", () => {
+    expect(() =>
+      renameFolderInWorkspace(
+        workspaceState,
+        normalizeFolderPath("Projects/Grove"),
+        normalizeFolderPath("Projects/Grove/Research"),
+      ),
+    ).toThrow("outside the selected folder");
+  });
 });
