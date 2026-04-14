@@ -137,6 +137,10 @@ apps/desktop/
 フォルダ path は workspace 相対 path として保持し、React state に絶対 path を入れません。
 path の正規化、rename、move、ファイルシステム上の整合性は `packages/core` と Tauri command 境界の責務に寄せます。
 
+フォルダ操作の state mutation は、React state 更新だけでなく `previousPath` / `nextPath` の変更計画も返します。
+desktop host はその計画を Tauri file I/O と SQLite index refresh に渡し、Markdown ファイルの移動、`Note.filePath` 更新、派生 index 更新を同じユーザー操作の結果として扱います。
+途中で file move や index refresh が失敗した場合も Markdown ファイルを正本とし、次回 workspace scan で folder tree と note list を再導出できる状態を維持します。
+
 Query 境界:
 
 - プラグインカタログ取得

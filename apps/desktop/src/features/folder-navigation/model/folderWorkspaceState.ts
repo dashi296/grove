@@ -21,9 +21,24 @@ export type FolderWorkspaceState = {
   expandedFolderPaths: readonly string[];
 };
 
+export type FolderWorkspacePathChange = {
+  noteId: string;
+  previousPath: NoteFilePath;
+  nextPath: NoteFilePath;
+};
+
+export type FolderWorkspaceIndexRefresh = {
+  noteIds: readonly string[];
+  reason: "note-move" | "folder-rename";
+};
+
+type FolderWorkspaceIndexRefreshReason = FolderWorkspaceIndexRefresh["reason"];
+
 export type FolderWorkspaceMutation = {
   state: FolderWorkspaceState;
+  pathChanges: readonly FolderWorkspacePathChange[];
   affectedNoteIds: readonly string[];
+  indexRefresh: FolderWorkspaceIndexRefresh;
 };
 
 function isFolderPathWithin(folderPath: FolderPath, parentFolderPath: FolderPath): boolean {
@@ -80,6 +95,24 @@ function getExistingFolderPathSet(state: FolderWorkspaceState): Set<string> {
   return new Set(flattenFolderTreePaths(folderTree));
 }
 
+function createWorkspaceMutation(
+  state: FolderWorkspaceState,
+  pathChanges: readonly FolderWorkspacePathChange[],
+  reason: FolderWorkspaceIndexRefreshReason,
+): FolderWorkspaceMutation {
+  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
+
+  return {
+    affectedNoteIds,
+    indexRefresh: {
+      noteIds: affectedNoteIds,
+      reason,
+    },
+    pathChanges,
+    state,
+  };
+}
+
 export function isDescendantFolderPath(
   folderPath: FolderPath,
   parentFolderPath: FolderPath,
@@ -111,7 +144,7 @@ export function moveNoteInFolderWorkspace(
   noteId: string,
   targetFolderPath: FolderScope,
 ): FolderWorkspaceMutation {
-  const affectedNoteIds: string[] = [];
+  const pathChanges: FolderWorkspacePathChange[] = [];
   const notes = state.notes.map((note) => {
     if (note.id !== noteId) {
       return note;
@@ -120,15 +153,18 @@ export function moveNoteInFolderWorkspace(
     const nextPath = moveNoteToFolder(note.path, targetFolderPath);
 
     if (nextPath !== note.path) {
-      affectedNoteIds.push(note.id);
+      pathChanges.push({
+        noteId: note.id,
+        previousPath: note.path,
+        nextPath,
+      });
     }
 
     return { ...note, path: nextPath };
   });
 
-  return {
-    affectedNoteIds,
-    state: {
+  return createWorkspaceMutation(
+    {
       ...state,
       notes,
       expandedFolderPaths:
@@ -140,7 +176,9 @@ export function moveNoteInFolderWorkspace(
             ]),
       selectedFolderPath: targetFolderPath,
     },
-  };
+    pathChanges,
+    "note-move",
+  );
 }
 
 export function renameFolderInWorkspace(
@@ -152,12 +190,16 @@ export function renameFolderInWorkspace(
     throw new Error("Choose a folder outside the selected folder.");
   }
 
-  const affectedNoteIds: string[] = [];
+  const pathChanges: FolderWorkspacePathChange[] = [];
   const notes = state.notes.map((note) => {
     const nextPath = renameFolderInNotePath(note.path, sourceFolderPath, targetFolderPath);
 
     if (nextPath !== note.path) {
-      affectedNoteIds.push(note.id);
+      pathChanges.push({
+        noteId: note.id,
+        previousPath: note.path,
+        nextPath,
+      });
     }
 
     return { ...note, path: nextPath };
@@ -180,14 +222,15 @@ export function renameFolderInWorkspace(
     ...(targetFolderPath === null ? [] : getFolderPathAncestors(targetFolderPath)),
   ]);
 
-  return {
-    affectedNoteIds,
-    state: {
+  return createWorkspaceMutation(
+    {
       ...state,
       notes,
       explicitFolders,
       expandedFolderPaths,
       selectedFolderPath: targetFolderPath,
     },
-  };
+    pathChanges,
+    "folder-rename",
+  );
 }
