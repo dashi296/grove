@@ -11,7 +11,7 @@ import {
   renameFolderInNotePath,
 } from "@grove/core";
 import type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "@grove/core";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import "./FolderNavigationWorkspace.css";
 
@@ -62,6 +62,7 @@ type ActivePaneProps = {
 
 type MoveNoteControlProps = {
   folderOptions: readonly FolderOption[];
+  selectedNoteFolderPath: FolderScope;
   onMoveSelectedNote: (targetFolderPath: FolderScope) => void;
   onOperationMessage: (message: string) => void;
 };
@@ -301,10 +302,15 @@ function NoteList({
 
 function MoveNoteControl({
   folderOptions,
+  selectedNoteFolderPath,
   onMoveSelectedNote,
   onOperationMessage,
 }: MoveNoteControlProps) {
-  const [moveTargetPath, setMoveTargetPath] = useState<string>("");
+  const [moveTargetPath, setMoveTargetPath] = useState<string>(selectedNoteFolderPath ?? "");
+
+  useEffect(() => {
+    setMoveTargetPath(selectedNoteFolderPath ?? "");
+  }, [selectedNoteFolderPath]);
 
   function moveSelectedNote(): void {
     try {
@@ -345,7 +351,11 @@ function RenameFolderControl({
   onRenameSelectedFolder,
   onOperationMessage,
 }: RenameFolderControlProps) {
-  const [renameTargetPath, setRenameTargetPath] = useState<string>("Projects/Work");
+  const [renameTargetPath, setRenameTargetPath] = useState<string>(selectedFolderPath ?? "");
+
+  useEffect(() => {
+    setRenameTargetPath(selectedFolderPath ?? "");
+  }, [selectedFolderPath]);
 
   function renameSelectedFolder(): void {
     try {
@@ -419,6 +429,7 @@ function ActivePane({
             <p>Path: {selectedNote.path}</p>
             <MoveNoteControl
               folderOptions={folderOptions}
+              selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
               onMoveSelectedNote={onMoveSelectedNote}
               onOperationMessage={setOperationMessage}
             />
