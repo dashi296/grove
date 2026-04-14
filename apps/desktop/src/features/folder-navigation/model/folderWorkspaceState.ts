@@ -32,6 +32,8 @@ export type FolderWorkspaceIndexRefresh = {
   reason: "note-move" | "folder-rename";
 };
 
+type FolderWorkspaceIndexRefreshReason = FolderWorkspaceIndexRefresh["reason"];
+
 export type FolderWorkspaceMutation = {
   state: FolderWorkspaceState;
   pathChanges: readonly FolderWorkspacePathChange[];
@@ -93,6 +95,24 @@ function getExistingFolderPathSet(state: FolderWorkspaceState): Set<string> {
   return new Set(flattenFolderTreePaths(folderTree));
 }
 
+function createWorkspaceMutation(
+  state: FolderWorkspaceState,
+  pathChanges: readonly FolderWorkspacePathChange[],
+  reason: FolderWorkspaceIndexRefreshReason,
+): FolderWorkspaceMutation {
+  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
+
+  return {
+    affectedNoteIds,
+    indexRefresh: {
+      noteIds: affectedNoteIds,
+      reason,
+    },
+    pathChanges,
+    state,
+  };
+}
+
 export function isDescendantFolderPath(
   folderPath: FolderPath,
   parentFolderPath: FolderPath,
@@ -142,16 +162,9 @@ export function moveNoteInFolderWorkspace(
 
     return { ...note, path: nextPath };
   });
-  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
 
-  return {
-    affectedNoteIds,
-    indexRefresh: {
-      noteIds: affectedNoteIds,
-      reason: "note-move",
-    },
-    pathChanges,
-    state: {
+  return createWorkspaceMutation(
+    {
       ...state,
       notes,
       expandedFolderPaths:
@@ -163,7 +176,9 @@ export function moveNoteInFolderWorkspace(
             ]),
       selectedFolderPath: targetFolderPath,
     },
-  };
+    pathChanges,
+    "note-move",
+  );
 }
 
 export function renameFolderInWorkspace(
@@ -189,7 +204,6 @@ export function renameFolderInWorkspace(
 
     return { ...note, path: nextPath };
   });
-  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
   const explicitFolders = dedupeAndSortFolderPaths(
     state.explicitFolders.flatMap((folderPath) => {
       const nextPath = replaceFolderPrefix(folderPath, sourceFolderPath, targetFolderPath);
@@ -208,19 +222,15 @@ export function renameFolderInWorkspace(
     ...(targetFolderPath === null ? [] : getFolderPathAncestors(targetFolderPath)),
   ]);
 
-  return {
-    affectedNoteIds,
-    indexRefresh: {
-      noteIds: affectedNoteIds,
-      reason: "folder-rename",
-    },
-    pathChanges,
-    state: {
+  return createWorkspaceMutation(
+    {
       ...state,
       notes,
       explicitFolders,
       expandedFolderPaths,
       selectedFolderPath: targetFolderPath,
     },
-  };
+    pathChanges,
+    "folder-rename",
+  );
 }
