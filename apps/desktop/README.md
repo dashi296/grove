@@ -15,7 +15,7 @@
 - Tauri v2
 - React 19
 - TypeScript `strict: true`
-- Tauri のフロントエンドに TanStack Start を使用
+- Tauri のフロントエンドは Vite + React で構成する
 - ローカル UI 状態管理に Zustand
 - 非同期境界にのみ TanStack Query を使用
 
@@ -35,7 +35,6 @@
 ### 初期実装で採用するライブラリ
 
 - `@tauri-apps/api`
-- `@tanstack/react-start`
 - `@tanstack/react-router`
 - `zustand`
 - `@tanstack/react-query`
@@ -71,20 +70,11 @@ apps/desktop/
 ├── src/
 │   ├── main.tsx
 │   ├── app/
-│   │   ├── providers/
-│   │   │   ├── AppProvider.tsx
-│   │   │   ├── QueryProvider.tsx
-│   │   │   └── ThemeProvider.tsx
-│   │   └── shell/
-│   │       ├── AppFrame.tsx
-│   │       ├── Sidebar.tsx
-│   │       └── WorkspaceGate.tsx
-│   ├── routes/
-│   │   ├── __root.tsx
-│   │   ├── index.tsx
-│   │   ├── editor.tsx
-│   │   ├── settings.tsx
-│   │   └── plugins.tsx
+│   │   ├── App.tsx
+│   │   ├── router.tsx
+│   │   └── routes/
+│   │       ├── __root.tsx
+│   │       └── index.tsx
 │   ├── features/
 │   │   ├── note-open/
 │   │   ├── note-search/
@@ -96,16 +86,9 @@ apps/desktop/
 │   │   ├── note/
 │   │   ├── tag/
 │   │   └── plugin/
+│   ├── shadcn/
 │   ├── shared/
-│   │   ├── api/
-│   │   │   ├── tauri.ts
-│   │   │   ├── commands.ts
-│   │   │   └── errors.ts
-│   │   ├── config/
-│   │   ├── lib/
-│   │   ├── model/
-│   │   ├── ui/
-│   │   └── styles/
+│   │   └── ui/
 └── src-tauri/
     ├── Cargo.toml
     ├── tauri.conf.json
@@ -127,24 +110,12 @@ apps/desktop/
 
 ## 構成ルール
 
-- `src/app` は Provider、アプリ共通 shell、トップレベル初期化のみを置く
-- `src/routes` は TanStack Start / TanStack Router の route file と route-level loader を置く
+- `src/app` はアプリ共通 shell、TanStack Router の route file、トップレベル初期化のみを置く
 - `src/features` はノートを開く、タブを移動する、プラグインを導入する、Workspace を選ぶといったユーザー操作単位を置く
 - `src/entities` は `Note`、`Tag`、`Plugin` などのドメイン単位の UI モジュールを置く
 - `src/shared` は低レベル UI、ラッパー、アダプタ、スキーマ、ユーティリティを置く
-- route file に過剰な UI 実装を溜めず、画面の composition は `src/app` の shell と `src/features`、`src/entities`、`src/shared` の組み合わせで表現する
+- `src/shadcn` は shadcn/ui 由来の primitive の配置先に限定し、Grove 固有 UI は `src/shared/ui` に置く
 - `src-tauri` では同期ポリシーや Markdown ドメインロジックを持たず、ネイティブ機能の公開だけを担当する
-
-## ルーティング方針
-
-初期ルート:
-
-- `/` は `/editor` にリダイレクト
-- `/editor` はメインのノート編集ワークスペース
-- `/settings` はアプリ設定
-- `/plugins` はプラグインストアとインストール済みプラグイン管理
-
-Workspace 切り替えや競合解決のようなモーダル中心のフローは、深い URL が必要になるまでは route 配下の UI 状態で扱います。
 
 ## デスクトップの状態設計
 
@@ -167,7 +138,7 @@ Query 境界:
 フロントエンドは `src/shared/api/commands.ts` の小さく型付けされた command 層だけを呼びます。
 生の `invoke()` をアプリ全体に散らさない方針です。
 
-ルーティングは TanStack Start / TanStack Router を前提にし、route とデータ境界を型付きで扱います。
+フロントエンドは Vite + React + TanStack Router の単純な SPA shell から始め、必要な画面分割は後続 issue で追加します。
 ネイティブ応答や設定値の runtime validation には `valibot` を使います。
 
 初期 command グループ:
@@ -206,3 +177,19 @@ Query 境界:
 - 全 OS でカスタムタイトルバーを使うか、必要な環境だけに限定するか
 - ファイル監視の debounce を Rust 側で持つか React 境界で持つか
 - コマンドパレットを v0.1 に入れるか、編集体験安定後に回すか
+
+## 検証手順
+
+依存解決と shell 構成の確認は monorepo ルートから行います。
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm dev:desktop
+```
+
+確認ポイント:
+
+- `@grove/core` の public export を desktop 側から import できること
+- desktop shell が起動し、Grove branding の最小画面が表示されること
+- `apps/desktop/src/app/routes` を route file の入口にしつつ、UI 共通部品が `shared/ui` に分かれていること

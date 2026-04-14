@@ -1,0 +1,30 @@
+{
+  "name": "@grove/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "build": "pnpm run build:android && pnpm run build:ios",
+    "build:android": "expo export --platform android",
+    "build:ios": "expo export --platform ios",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@grove/core": "workspace:*",
+    "expo": "^53.0.0",
+    "expo-router": "~5.1.11",
+    "nativewind": "^4.0.0",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-css-interop": "^0.2.3",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-reanimated": "~3.17.4",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1",
+    "react-native-worklets": "0.8.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "grove",
+  "private": true,
+  "scripts": {
+    "dev:desktop": "pnpm --filter @grove/desktop tauri:dev",
+    "dev:mobile": "pnpm --filter @grove/mobile dev",
+    "build:desktop": "pnpm --filter @grove/desktop tauri:build",
+    "build:mobile": "pnpm --filter @grove/mobile build",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "oxlint apps packages plugins --deny-warnings",
+    "format": "oxfmt --check .",
+    "format:write": "oxfmt --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "oxfmt": "^0.33.0",
+    "oxlint": "^1.48.0",
+    "turbo": "^2.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

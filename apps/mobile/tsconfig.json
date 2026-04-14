@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022"],
+    "types": ["nativewind/types"]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "providers/**/*.ts",
+    "providers/**/*.tsx",
+    "features/**/*.ts",
+    "features/**/*.tsx",
+    "entities/**/*.ts",
+    "entities/**/*.tsx",
+    "shared/**/*.ts",
+    "shared/**/*.tsx",
+    "nativewind-env.d.ts"
+  ]
+}
