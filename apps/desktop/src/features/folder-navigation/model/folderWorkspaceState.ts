@@ -1,10 +1,11 @@
 import {
+  buildFolderTree,
   compareWorkspacePaths,
   moveNoteToFolder,
   normalizeFolderPath,
   renameFolderInNotePath,
 } from "@grove/core";
-import type { FolderPath, FolderScope, NoteFilePath } from "@grove/core";
+import type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "@grove/core";
 
 export type FolderNavigationNote = {
   id: string;
@@ -66,11 +67,43 @@ function getFolderPathAncestors(folderPath: FolderPath): FolderPath[] {
   return ancestors;
 }
 
+function flattenFolderTreePaths(folderTree: readonly FolderTreeNode[]): FolderPath[] {
+  return folderTree.flatMap((node) => [node.path, ...flattenFolderTreePaths(node.children)]);
+}
+
+function getExistingFolderPathSet(state: FolderWorkspaceState): Set<string> {
+  const folderTree = buildFolderTree(
+    state.notes.map((note) => note.path),
+    state.explicitFolders,
+  );
+
+  return new Set(flattenFolderTreePaths(folderTree));
+}
+
 export function isDescendantFolderPath(
   folderPath: FolderPath,
   parentFolderPath: FolderPath,
 ): boolean {
   return folderPath.startsWith(`${parentFolderPath}/`);
+}
+
+export function reconcileFolderWorkspaceState(state: FolderWorkspaceState): FolderWorkspaceState {
+  const existingFolderPaths = getExistingFolderPathSet(state);
+  const selectedFolderPath =
+    state.selectedFolderPath !== null && existingFolderPaths.has(state.selectedFolderPath)
+      ? state.selectedFolderPath
+      : null;
+  const expandedFolderPaths = dedupeExpandedFolderPaths(
+    state.expandedFolderPaths
+      .map((folderPath) => normalizeFolderPath(folderPath))
+      .filter((folderPath) => existingFolderPaths.has(folderPath)),
+  );
+
+  return {
+    ...state,
+    expandedFolderPaths,
+    selectedFolderPath,
+  };
 }
 
 export function moveNoteInFolderWorkspace(
@@ -98,6 +131,13 @@ export function moveNoteInFolderWorkspace(
     state: {
       ...state,
       notes,
+      expandedFolderPaths:
+        targetFolderPath === null
+          ? state.expandedFolderPaths
+          : dedupeExpandedFolderPaths([
+              ...state.expandedFolderPaths,
+              ...getFolderPathAncestors(targetFolderPath),
+            ]),
       selectedFolderPath: targetFolderPath,
     },
   };

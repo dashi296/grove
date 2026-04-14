@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import type { FolderWorkspaceState } from "./folderWorkspaceState";
-import { moveNoteInFolderWorkspace, renameFolderInWorkspace } from "./folderWorkspaceState";
+import {
+  moveNoteInFolderWorkspace,
+  reconcileFolderWorkspaceState,
+  renameFolderInWorkspace,
+} from "./folderWorkspaceState";
 
 const workspaceState: FolderWorkspaceState = {
   notes: [
@@ -44,6 +48,55 @@ describe("moveNoteInFolderWorkspace", () => {
     );
     expect(result.state.selectedFolderPath).toBe("Reading");
     expect(result.state.explicitFolders).toStrictEqual(workspaceState.explicitFolders);
+  });
+
+  it("expands ancestors when a note moves into a nested folder", () => {
+    const result = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-root",
+      normalizeFolderPath("Projects/Grove/Ideas"),
+    );
+
+    expect(result.state.notes.find((note) => note.id === "note-root")?.path).toBe(
+      "Projects/Grove/Ideas/Inbox.md",
+    );
+    expect(result.state.expandedFolderPaths).toStrictEqual([
+      "Projects",
+      "Projects/Grove",
+      "Projects/Grove/Research",
+    ]);
+    expect(result.state.selectedFolderPath).toBe("Projects/Grove/Ideas");
+  });
+});
+
+describe("reconcileFolderWorkspaceState", () => {
+  it("moves stale folder selection back to the workspace root after a folder disappears", () => {
+    const result = reconcileFolderWorkspaceState({
+      ...workspaceState,
+      notes: workspaceState.notes.filter((note) => !note.path.startsWith("Projects/Grove/")),
+      explicitFolders: [normalizeFolderPath("Reading")],
+      selectedFolderPath: normalizeFolderPath("Projects/Grove"),
+      expandedFolderPaths: ["Projects", "Projects/Grove", "Projects/Grove/Research", "Reading"],
+    });
+
+    expect(result.selectedFolderPath).toBeNull();
+    expect(result.expandedFolderPaths).toStrictEqual(["Reading"]);
+  });
+
+  it("keeps selection for an explicit empty folder that still exists", () => {
+    const result = reconcileFolderWorkspaceState({
+      ...workspaceState,
+      notes: [],
+      selectedFolderPath: normalizeFolderPath("Projects/Grove/Ideas"),
+      expandedFolderPaths: ["Projects", "Projects/Grove", "Projects/Grove/Ideas"],
+    });
+
+    expect(result.selectedFolderPath).toBe("Projects/Grove/Ideas");
+    expect(result.expandedFolderPaths).toStrictEqual([
+      "Projects",
+      "Projects/Grove",
+      "Projects/Grove/Ideas",
+    ]);
   });
 });
 

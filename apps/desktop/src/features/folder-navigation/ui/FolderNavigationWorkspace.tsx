@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   isDescendantFolderPath,
   moveNoteInFolderWorkspace,
+  reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
 } from "../model/folderWorkspaceState";
 import type { FolderNavigationNote, FolderWorkspaceState } from "../model/folderWorkspaceState";
@@ -450,7 +451,7 @@ export function FolderNavigationWorkspace() {
   }, [notes, selectedFolderPath]);
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
-    setWorkspaceState(nextState);
+    setWorkspaceState(reconcileFolderWorkspaceState(nextState));
   }
 
   function toggleFolder(path: string): void {
