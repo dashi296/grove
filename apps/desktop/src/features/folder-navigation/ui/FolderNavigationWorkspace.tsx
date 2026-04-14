@@ -60,6 +60,18 @@ type ActivePaneProps = {
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => void;
 };
 
+type MoveNoteControlProps = {
+  folderOptions: readonly FolderOption[];
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => void;
+  onOperationMessage: (message: string) => void;
+};
+
+type RenameFolderControlProps = {
+  selectedFolderPath: FolderScope;
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => void;
+  onOperationMessage: (message: string) => void;
+};
+
 const initialNotes: readonly NoteListItem[] = [
   {
     id: "note-inbox",
@@ -287,29 +299,53 @@ function NoteList({
   );
 }
 
-function ActivePane({
-  notes,
+function MoveNoteControl({
   folderOptions,
-  selectedFolderPath,
-  selectedNoteId,
   onMoveSelectedNote,
-  onRenameSelectedFolder,
-}: ActivePaneProps) {
-  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
+  onOperationMessage,
+}: MoveNoteControlProps) {
   const [moveTargetPath, setMoveTargetPath] = useState<string>("");
-  const [renameTargetPath, setRenameTargetPath] = useState<string>("Projects/Work");
-  const [operationMessage, setOperationMessage] = useState<string>(
-    "Path changes refresh the folder tree and note list immediately.",
-  );
 
   function moveSelectedNote(): void {
     try {
       onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
-      setOperationMessage("Moved the note and refreshed folder counts.");
+      onOperationMessage("Moved the note and refreshed folder counts.");
     } catch (error) {
-      setOperationMessage(getErrorMessage(error));
+      onOperationMessage(getErrorMessage(error));
     }
   }
+
+  return (
+    <div className="folder-navigation__operation">
+      <label className="folder-navigation__label" htmlFor="move-note-target">
+        Move selected note
+      </label>
+      <select
+        id="move-note-target"
+        className="folder-navigation__select"
+        value={moveTargetPath}
+        onChange={(event) => setMoveTargetPath(event.target.value)}
+      >
+        <option value="">Workspace root</option>
+        {folderOptions.map((option) => (
+          <option key={option.path ?? "root"} value={option.path ?? ""}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="folder-navigation__action" onClick={moveSelectedNote}>
+        Move note
+      </button>
+    </div>
+  );
+}
+
+function RenameFolderControl({
+  selectedFolderPath,
+  onRenameSelectedFolder,
+  onOperationMessage,
+}: RenameFolderControlProps) {
+  const [renameTargetPath, setRenameTargetPath] = useState<string>("Projects/Work");
 
   function renameSelectedFolder(): void {
     try {
@@ -320,16 +356,56 @@ function ActivePane({
         targetFolderPath !== null &&
         isDescendantFolderPath(targetFolderPath, selectedFolderPath)
       ) {
-        setOperationMessage("Choose a folder outside the selected folder.");
+        onOperationMessage("Choose a folder outside the selected folder.");
         return;
       }
 
       onRenameSelectedFolder(targetFolderPath);
-      setOperationMessage("Renamed the folder and refreshed affected note paths.");
+      onOperationMessage("Renamed the folder and refreshed affected note paths.");
     } catch (error) {
-      setOperationMessage(getErrorMessage(error));
+      onOperationMessage(getErrorMessage(error));
     }
   }
+
+  return (
+    <div className="folder-navigation__operation">
+      <label className="folder-navigation__label" htmlFor="rename-folder-target">
+        Rename selected folder
+      </label>
+      <input
+        id="rename-folder-target"
+        className="folder-navigation__input"
+        value={renameTargetPath}
+        onChange={(event) => setRenameTargetPath(event.target.value)}
+        disabled={selectedFolderPath === null}
+      />
+      <button
+        type="button"
+        className="folder-navigation__action"
+        onClick={renameSelectedFolder}
+        disabled={selectedFolderPath === null}
+      >
+        Rename folder
+      </button>
+      <p className="folder-navigation__muted">
+        Current folder: {getFolderPathLabel(selectedFolderPath)}
+      </p>
+    </div>
+  );
+}
+
+function ActivePane({
+  notes,
+  folderOptions,
+  selectedFolderPath,
+  selectedNoteId,
+  onMoveSelectedNote,
+  onRenameSelectedFolder,
+}: ActivePaneProps) {
+  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
+  const [operationMessage, setOperationMessage] = useState<string>(
+    "Path changes refresh the folder tree and note list immediately.",
+  );
 
   return (
     <section className="folder-navigation__pane">
@@ -341,57 +417,19 @@ function ActivePane({
         ) : (
           <>
             <p>Path: {selectedNote.path}</p>
-            <div className="folder-navigation__operation">
-              <label className="folder-navigation__label" htmlFor="move-note-target">
-                Move selected note
-              </label>
-              <select
-                id="move-note-target"
-                className="folder-navigation__select"
-                value={moveTargetPath}
-                onChange={(event) => setMoveTargetPath(event.target.value)}
-              >
-                <option value="">Workspace root</option>
-                {folderOptions.map((option) => (
-                  <option key={option.path ?? "root"} value={option.path ?? ""}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="folder-navigation__action"
-                onClick={moveSelectedNote}
-              >
-                Move note
-              </button>
-            </div>
+            <MoveNoteControl
+              folderOptions={folderOptions}
+              onMoveSelectedNote={onMoveSelectedNote}
+              onOperationMessage={setOperationMessage}
+            />
           </>
         )}
-        <div className="folder-navigation__operation">
-          <label className="folder-navigation__label" htmlFor="rename-folder-target">
-            Rename selected folder
-          </label>
-          <input
-            id="rename-folder-target"
-            className="folder-navigation__input"
-            value={renameTargetPath}
-            onChange={(event) => setRenameTargetPath(event.target.value)}
-            disabled={selectedFolderPath === null}
-          />
-          <button
-            type="button"
-            className="folder-navigation__action"
-            onClick={renameSelectedFolder}
-            disabled={selectedFolderPath === null}
-          >
-            Rename folder
-          </button>
-          <p className="folder-navigation__muted">
-            Current folder: {getFolderPathLabel(selectedFolderPath)}
-          </p>
-          <p className="folder-navigation__muted">{operationMessage}</p>
-        </div>
+        <RenameFolderControl
+          selectedFolderPath={selectedFolderPath}
+          onRenameSelectedFolder={onRenameSelectedFolder}
+          onOperationMessage={setOperationMessage}
+        />
+        <p className="folder-navigation__muted">{operationMessage}</p>
       </div>
     </section>
   );
