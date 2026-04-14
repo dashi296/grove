@@ -21,9 +21,22 @@ export type FolderWorkspaceState = {
   expandedFolderPaths: readonly string[];
 };
 
+export type FolderWorkspacePathChange = {
+  noteId: string;
+  previousPath: NoteFilePath;
+  nextPath: NoteFilePath;
+};
+
+export type FolderWorkspaceIndexRefresh = {
+  noteIds: readonly string[];
+  reason: "note-move" | "folder-rename";
+};
+
 export type FolderWorkspaceMutation = {
   state: FolderWorkspaceState;
+  pathChanges: readonly FolderWorkspacePathChange[];
   affectedNoteIds: readonly string[];
+  indexRefresh: FolderWorkspaceIndexRefresh;
 };
 
 function isFolderPathWithin(folderPath: FolderPath, parentFolderPath: FolderPath): boolean {
@@ -111,7 +124,7 @@ export function moveNoteInFolderWorkspace(
   noteId: string,
   targetFolderPath: FolderScope,
 ): FolderWorkspaceMutation {
-  const affectedNoteIds: string[] = [];
+  const pathChanges: FolderWorkspacePathChange[] = [];
   const notes = state.notes.map((note) => {
     if (note.id !== noteId) {
       return note;
@@ -120,14 +133,24 @@ export function moveNoteInFolderWorkspace(
     const nextPath = moveNoteToFolder(note.path, targetFolderPath);
 
     if (nextPath !== note.path) {
-      affectedNoteIds.push(note.id);
+      pathChanges.push({
+        noteId: note.id,
+        previousPath: note.path,
+        nextPath,
+      });
     }
 
     return { ...note, path: nextPath };
   });
+  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
 
   return {
     affectedNoteIds,
+    indexRefresh: {
+      noteIds: affectedNoteIds,
+      reason: "note-move",
+    },
+    pathChanges,
     state: {
       ...state,
       notes,
@@ -152,16 +175,21 @@ export function renameFolderInWorkspace(
     throw new Error("Choose a folder outside the selected folder.");
   }
 
-  const affectedNoteIds: string[] = [];
+  const pathChanges: FolderWorkspacePathChange[] = [];
   const notes = state.notes.map((note) => {
     const nextPath = renameFolderInNotePath(note.path, sourceFolderPath, targetFolderPath);
 
     if (nextPath !== note.path) {
-      affectedNoteIds.push(note.id);
+      pathChanges.push({
+        noteId: note.id,
+        previousPath: note.path,
+        nextPath,
+      });
     }
 
     return { ...note, path: nextPath };
   });
+  const affectedNoteIds = pathChanges.map((pathChange) => pathChange.noteId);
   const explicitFolders = dedupeAndSortFolderPaths(
     state.explicitFolders.flatMap((folderPath) => {
       const nextPath = replaceFolderPrefix(folderPath, sourceFolderPath, targetFolderPath);
@@ -182,6 +210,11 @@ export function renameFolderInWorkspace(
 
   return {
     affectedNoteIds,
+    indexRefresh: {
+      noteIds: affectedNoteIds,
+      reason: "folder-rename",
+    },
+    pathChanges,
     state: {
       ...state,
       notes,

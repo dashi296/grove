@@ -17,7 +17,11 @@ import {
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
 } from "../model/folderWorkspaceState";
-import type { FolderNavigationNote, FolderWorkspaceState } from "../model/folderWorkspaceState";
+import type {
+  FolderNavigationNote,
+  FolderWorkspacePathChange,
+  FolderWorkspaceState,
+} from "../model/folderWorkspaceState";
 import "./FolderNavigationWorkspace.css";
 
 type NoteListItem = FolderNavigationNote;
@@ -56,20 +60,20 @@ type ActivePaneProps = {
   folderOptions: readonly FolderOption[];
   selectedFolderPath: FolderScope;
   selectedNoteId: string;
-  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly string[];
-  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly string[];
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
 };
 
 type MoveNoteControlProps = {
   folderOptions: readonly FolderOption[];
   selectedNoteFolderPath: FolderScope;
-  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly string[];
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
   onOperationMessage: (message: string) => void;
 };
 
 type RenameFolderControlProps = {
   selectedFolderPath: FolderScope;
-  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly string[];
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
   onOperationMessage: (message: string) => void;
 };
 
@@ -135,6 +139,15 @@ function flattenFolderTree(folderTree: readonly FolderTreeNode[]): FolderOption[
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The folder path is invalid.";
+}
+
+function getPathChangeSummary(pathChanges: readonly FolderWorkspacePathChange[]): string {
+  if (pathChanges.length === 0) {
+    return "No file path changes were needed.";
+  }
+
+  const noun = pathChanges.length === 1 ? "change" : "changes";
+  return `${pathChanges.length} file path ${noun} queued for file move and index refresh.`;
 }
 
 function FolderNode({
@@ -292,9 +305,8 @@ function MoveNoteControl({
 
   function moveSelectedNote(): void {
     try {
-      const affectedNoteIds = onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
-      const movedNoteCount = affectedNoteIds.length;
-      onOperationMessage(`Moved ${movedNoteCount} note and refreshed folder counts.`);
+      const pathChanges = onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
+      onOperationMessage(getPathChangeSummary(pathChanges));
     } catch (error) {
       onOperationMessage(getErrorMessage(error));
     }
@@ -349,10 +361,8 @@ function RenameFolderControl({
         return;
       }
 
-      const affectedNoteIds = onRenameSelectedFolder(targetFolderPath);
-      onOperationMessage(
-        `Renamed the folder and refreshed ${affectedNoteIds.length} affected note paths.`,
-      );
+      const pathChanges = onRenameSelectedFolder(targetFolderPath);
+      onOperationMessage(getPathChangeSummary(pathChanges));
     } catch (error) {
       onOperationMessage(getErrorMessage(error));
     }
@@ -479,20 +489,22 @@ export function FolderNavigationWorkspace() {
     }));
   }
 
-  function moveSelectedNote(targetFolderPath: FolderScope): readonly string[] {
+  function moveSelectedNote(targetFolderPath: FolderScope): readonly FolderWorkspacePathChange[] {
     const mutation = moveNoteInFolderWorkspace(workspaceState, selectedNoteId, targetFolderPath);
     applyWorkspaceState(mutation.state);
-    return mutation.affectedNoteIds;
+    return mutation.pathChanges;
   }
 
-  function renameSelectedFolder(targetFolderPath: FolderScope): readonly string[] {
+  function renameSelectedFolder(
+    targetFolderPath: FolderScope,
+  ): readonly FolderWorkspacePathChange[] {
     if (selectedFolderPath === null) {
       return [];
     }
 
     const mutation = renameFolderInWorkspace(workspaceState, selectedFolderPath, targetFolderPath);
     applyWorkspaceState(mutation.state);
-    return mutation.affectedNoteIds;
+    return mutation.pathChanges;
   }
 
   return (

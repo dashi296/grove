@@ -43,6 +43,17 @@ describe("moveNoteInFolderWorkspace", () => {
     );
 
     expect(result.affectedNoteIds).toStrictEqual(["note-plan"]);
+    expect(result.pathChanges).toStrictEqual([
+      {
+        noteId: "note-plan",
+        previousPath: "Projects/Grove/Plan.md",
+        nextPath: "Reading/Plan.md",
+      },
+    ]);
+    expect(result.indexRefresh).toStrictEqual({
+      noteIds: ["note-plan"],
+      reason: "note-move",
+    });
     expect(result.state.notes.find((note) => note.id === "note-plan")?.path).toBe(
       "Reading/Plan.md",
     );
@@ -109,6 +120,22 @@ describe("renameFolderInWorkspace", () => {
     );
 
     expect(result.affectedNoteIds).toStrictEqual(["note-plan", "note-research"]);
+    expect(result.pathChanges).toStrictEqual([
+      {
+        noteId: "note-plan",
+        previousPath: "Projects/Grove/Plan.md",
+        nextPath: "Areas/Grove/Plan.md",
+      },
+      {
+        noteId: "note-research",
+        previousPath: "Projects/Grove/Research/Notes.md",
+        nextPath: "Areas/Grove/Research/Notes.md",
+      },
+    ]);
+    expect(result.indexRefresh).toStrictEqual({
+      noteIds: ["note-plan", "note-research"],
+      reason: "folder-rename",
+    });
     expect(result.state.notes.map((note) => note.path)).toStrictEqual([
       "Inbox.md",
       "Areas/Grove/Plan.md",
