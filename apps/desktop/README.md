@@ -76,6 +76,7 @@ apps/desktop/
 │   │       ├── __root.tsx
 │   │       └── index.tsx
 │   ├── features/
+│   │   ├── folder-navigation/
 │   │   ├── note-open/
 │   │   ├── note-search/
 │   │   ├── note-tabs/
@@ -126,12 +127,67 @@ apps/desktop/
 - `usePluginStore`: インストール済みプラグインと関連 UI 状態
 - `useUiStore`: モーダル、サイドバー、コマンドパレット状態
 
+フォルダナビゲーションの UI 状態:
+
+- `selectedFolderPath`: note list の現在スコープ。workspace root は `null` で表す
+- `expandedFolderPaths`: サイドバー tree の展開状態。workspace 相対 path の配列として保持する
+- `isSidebarCollapsed`: サイドバー全体の表示状態
+- `noteListSort`: フォルダ選択中の note list 並び順
+
+フォルダ path は workspace 相対 path として保持し、React state に絶対 path を入れません。
+path の正規化、rename、move、ファイルシステム上の整合性は `packages/core` と Tauri command 境界の責務に寄せます。
+
 Query 境界:
 
 - プラグインカタログ取得
 - プラグインのダウンロードとインストール進捗
 - ノートインデックス再構築トリガー
 - バックグラウンド同期状態のポーリング
+- フォルダ別 note list と folder tree の再取得
+
+## フォルダナビゲーション
+
+desktop は広い画面を前提に、左サイドバーの folder tree、中央の note list、右側の editor pane area を基本形にします。
+mobile の bottom tab / stack navigation とは分け、desktop ではフォルダ選択を note list のスコープ変更として扱います。
+
+### サイドバー
+
+- workspace root は固定項目として表示し、全ノートへの入口にする
+- root 配下に workspace 相対 path の folder tree を表示する
+- folder node は開閉可能にし、展開状態は workspace ごとに保持する
+- 未選択時は workspace root を選択した状態と同じ扱いにする
+- 空フォルダも表示する。移動や作成直後にノートがなくても場所の存在を失わせないため
+- フォルダ名の横には直接配下と子孫を含む note count を表示する
+- search、settings、plugin store は folder tree とは別の navigation group として扱う
+
+### 選択と note list
+
+- folder を選択すると note list はその folder と子孫 folder のノートに絞り込む
+- workspace root を選択すると全ノートを表示する
+- note list の search box は現在選択中の folder scope を初期条件にする
+- 検索結果から note を開いても、現在の folder 選択は維持する
+- folder scope 内にノートがない場合は、そのフォルダで新規ノートを作る導線を出す
+- workspace 全体にノートがない場合は、workspace 選択後の初期作成導線を出す
+- folder がファイルシステム変更で消えた場合は root scope に戻し、note list を再取得する
+
+### ペインとタブとの関係
+
+- フォルダ選択は `useNoteStore.panes` を直接変更しない
+- note list で note を選ぶと `openNoteInActivePane()` を呼び、現在の active pane に開く
+- 修飾キーや context menu の「新しいペインで開く」は `openNoteInNewPane()` を使う
+- 既に開いている note を別 folder scope から選んだ場合も、既存 tab の重複制御は `useNoteStore` に任せる
+- active note が現在の folder scope 外にあっても閉じない。フォルダ選択は閲覧スコープであり、開いている作業対象を破棄しないため
+- tab の drag and drop は `moveTabToPane()` と `reorderTabs()` の範囲で扱い、folder tree への drag and drop move は別 issue に分ける
+
+### 後続実装スライス
+
+1. `packages/core` に workspace 相対 folder path と note path の semantics を定義する
+2. Tauri command 境界に folder tree と folder-scoped note list の取得 API を追加する
+3. `src/features/folder-navigation/` に folder tree、選択状態、空状態を実装する
+4. `src/features/note-open/` と note list から `openNoteInActivePane()` / `openNoteInNewPane()` を呼び分ける
+5. `src/features/note-search/` に selected folder scope を渡す
+6. folder 削除、rename、move による stale selection を root scope へ戻す処理を追加する
+7. component test で選択、展開、空状態、既存 tab の重複回避を確認する
 
 ## ネイティブ command 境界
 
