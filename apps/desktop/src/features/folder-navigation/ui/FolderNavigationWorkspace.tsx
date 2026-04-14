@@ -9,9 +9,10 @@ import {
   normalizeNoteFilePath,
 } from "@grove/core";
 import type { FolderScope, FolderTreeNode } from "@grove/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  createPathChangeOperation,
   isDescendantFolderPath,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
@@ -19,7 +20,10 @@ import {
 } from "../model/folderWorkspaceState";
 import type {
   FolderNavigationNote,
+  FolderWorkspaceMutation,
+  FolderWorkspaceOperationStep,
   FolderWorkspacePathChange,
+  FolderWorkspacePathChangeOperation,
   FolderWorkspaceState,
 } from "../model/folderWorkspaceState";
 import "./FolderNavigationWorkspace.css";
@@ -60,21 +64,25 @@ type ActivePaneProps = {
   folderOptions: readonly FolderOption[];
   selectedFolderPath: FolderScope;
   selectedNoteId: string;
-  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
-  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
 };
 
 type MoveNoteControlProps = {
   folderOptions: readonly FolderOption[];
   selectedNoteFolderPath: FolderScope;
-  onMoveSelectedNote: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onOperationMessage: (message: string) => void;
 };
 
 type RenameFolderControlProps = {
   selectedFolderPath: FolderScope;
-  onRenameSelectedFolder: (targetFolderPath: FolderScope) => readonly FolderWorkspacePathChange[];
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onOperationMessage: (message: string) => void;
+};
+
+type PathChangeQueueProps = {
+  operations: readonly FolderWorkspacePathChangeOperation[];
 };
 
 const initialNotes: readonly NoteListItem[] = [
@@ -148,6 +156,14 @@ function getPathChangeSummary(pathChanges: readonly FolderWorkspacePathChange[])
 
   const noun = pathChanges.length === 1 ? "change" : "changes";
   return `${pathChanges.length} file path ${noun} queued for file move and index refresh.`;
+}
+
+function getOperationReasonLabel(reason: FolderWorkspacePathChangeOperation["reason"]): string {
+  return reason === "note-move" ? "Note move" : "Folder rename";
+}
+
+function getOperationStepLabel(stepId: FolderWorkspaceOperationStep["id"]): string {
+  return stepId === "file-move" ? "Move Markdown files on disk" : "Refresh derived SQLite indexes";
 }
 
 function FolderNode({
@@ -305,8 +321,8 @@ function MoveNoteControl({
 
   function moveSelectedNote(): void {
     try {
-      const pathChanges = onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
-      onOperationMessage(getPathChangeSummary(pathChanges));
+      const mutation = onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
+      onOperationMessage(getPathChangeSummary(mutation.pathChanges));
     } catch (error) {
       onOperationMessage(getErrorMessage(error));
     }
@@ -361,8 +377,8 @@ function RenameFolderControl({
         return;
       }
 
-      const pathChanges = onRenameSelectedFolder(targetFolderPath);
-      onOperationMessage(getPathChangeSummary(pathChanges));
+      const mutation = onRenameSelectedFolder(targetFolderPath);
+      onOperationMessage(getPathChangeSummary(mutation.pathChanges));
     } catch (error) {
       onOperationMessage(getErrorMessage(error));
     }
@@ -437,6 +453,55 @@ function ActivePane({
   );
 }
 
+function PathChangeQueue({ operations }: PathChangeQueueProps) {
+  return (
+    <section className="folder-navigation__queue" aria-label="Pending path changes">
+      <p className="folder-navigation__eyebrow">Local operations</p>
+      <h2 className="folder-navigation__heading">Path change queue</h2>
+      {operations.length > 0 ? (
+        <ol className="folder-navigation__operations">
+          {operations.map((operation) => (
+            <li key={operation.id} className="folder-navigation__operation-item">
+              <div>
+                <h3 className="folder-navigation__operation-title">
+                  {getOperationReasonLabel(operation.reason)}
+                </h3>
+                <p className="folder-navigation__muted">
+                  {operation.pathChanges.length} file path{" "}
+                  {operation.pathChanges.length === 1 ? "change" : "changes"}
+                </p>
+              </div>
+              <ol className="folder-navigation__steps">
+                {operation.steps.map((step) => (
+                  <li key={step.id} className="folder-navigation__step">
+                    <span>{getOperationStepLabel(step.id)}</span>
+                    <span className="folder-navigation__status">{step.status}</span>
+                  </li>
+                ))}
+              </ol>
+              <ol className="folder-navigation__path-changes">
+                {operation.pathChanges.map((pathChange) => (
+                  <li key={`${operation.id}-${pathChange.noteId}`}>
+                    <span>{pathChange.previousPath}</span>
+                    <span>{pathChange.nextPath}</span>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <div className="folder-navigation__empty">
+          <h3 className="folder-navigation__note-title">No pending path changes</h3>
+          <p className="folder-navigation__muted">
+            Move a note or rename a folder to queue local file and index work.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function FolderNavigationWorkspace() {
   const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>({
     notes: initialNotes,
@@ -445,6 +510,10 @@ export function FolderNavigationWorkspace() {
     expandedFolderPaths: ["Projects", "Projects/Grove"],
   });
   const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[1]?.id ?? "");
+  const [pathChangeOperations, setPathChangeOperations] = useState<
+    readonly FolderWorkspacePathChangeOperation[]
+  >([]);
+  const nextOperationNumber = useRef(1);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
 
   const folderTree = useMemo(() => {
@@ -489,22 +558,44 @@ export function FolderNavigationWorkspace() {
     }));
   }
 
-  function moveSelectedNote(targetFolderPath: FolderScope): readonly FolderWorkspacePathChange[] {
-    const mutation = moveNoteInFolderWorkspace(workspaceState, selectedNoteId, targetFolderPath);
-    applyWorkspaceState(mutation.state);
-    return mutation.pathChanges;
+  function queuePathChangeOperation(mutation: FolderWorkspaceMutation): void {
+    const operation = createPathChangeOperation(
+      `path-change-${nextOperationNumber.current}`,
+      mutation,
+    );
+
+    if (operation === null) {
+      return;
+    }
+
+    nextOperationNumber.current += 1;
+    setPathChangeOperations((currentOperations) => [operation, ...currentOperations]);
   }
 
-  function renameSelectedFolder(
-    targetFolderPath: FolderScope,
-  ): readonly FolderWorkspacePathChange[] {
+  function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
+    const mutation = moveNoteInFolderWorkspace(workspaceState, selectedNoteId, targetFolderPath);
+    applyWorkspaceState(mutation.state);
+    queuePathChangeOperation(mutation);
+    return mutation;
+  }
+
+  function renameSelectedFolder(targetFolderPath: FolderScope): FolderWorkspaceMutation {
     if (selectedFolderPath === null) {
-      return [];
+      return {
+        affectedNoteIds: [],
+        indexRefresh: {
+          noteIds: [],
+          reason: "folder-rename",
+        },
+        pathChanges: [],
+        state: workspaceState,
+      };
     }
 
     const mutation = renameFolderInWorkspace(workspaceState, selectedFolderPath, targetFolderPath);
     applyWorkspaceState(mutation.state);
-    return mutation.pathChanges;
+    queuePathChangeOperation(mutation);
+    return mutation;
   }
 
   return (
@@ -531,6 +622,7 @@ export function FolderNavigationWorkspace() {
         onMoveSelectedNote={moveSelectedNote}
         onRenameSelectedFolder={renameSelectedFolder}
       />
+      <PathChangeQueue operations={pathChangeOperations} />
     </section>
   );
 }

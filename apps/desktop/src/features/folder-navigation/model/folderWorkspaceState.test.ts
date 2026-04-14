@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import type { FolderWorkspaceState } from "./folderWorkspaceState";
 import {
+  createPathChangeOperation,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
@@ -77,6 +78,49 @@ describe("moveNoteInFolderWorkspace", () => {
       "Projects/Grove/Research",
     ]);
     expect(result.state.selectedFolderPath).toBe("Projects/Grove/Ideas");
+  });
+});
+
+describe("createPathChangeOperation", () => {
+  it("creates a pending file and index operation for changed note paths", () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+
+    expect(createPathChangeOperation("operation-1", mutation)).toStrictEqual({
+      id: "operation-1",
+      reason: "note-move",
+      affectedNoteIds: ["note-plan"],
+      pathChanges: [
+        {
+          noteId: "note-plan",
+          previousPath: "Projects/Grove/Plan.md",
+          nextPath: "Reading/Plan.md",
+        },
+      ],
+      steps: [
+        {
+          id: "file-move",
+          status: "pending",
+        },
+        {
+          id: "index-refresh",
+          status: "pending",
+        },
+      ],
+    });
+  });
+
+  it("does not create an operation when paths are unchanged", () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Projects/Grove"),
+    );
+
+    expect(createPathChangeOperation("operation-1", mutation)).toBeNull();
   });
 });
 
