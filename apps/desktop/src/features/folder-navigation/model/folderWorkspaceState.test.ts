@@ -63,6 +63,7 @@ describe("renameFolderInWorkspace", () => {
     ]);
     expect(result.state.explicitFolders).toStrictEqual(["Areas/Grove/Ideas", "Reading"]);
     expect(result.state.expandedFolderPaths).toStrictEqual([
+      "Areas",
       "Areas/Grove",
       "Areas/Grove/Research",
       "Projects",

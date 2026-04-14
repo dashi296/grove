@@ -55,6 +55,17 @@ function dedupeExpandedFolderPaths(folderPaths: readonly string[]): string[] {
   return [...new Set(folderPaths)].sort(compareWorkspacePaths);
 }
 
+function getFolderPathAncestors(folderPath: FolderPath): FolderPath[] {
+  const segments = folderPath.split("/");
+  const ancestors: FolderPath[] = [];
+
+  for (let index = 1; index < segments.length; index += 1) {
+    ancestors.push(normalizeFolderPath(segments.slice(0, index).join("/")));
+  }
+
+  return ancestors;
+}
+
 export function isDescendantFolderPath(
   folderPath: FolderPath,
   parentFolderPath: FolderPath,
@@ -117,8 +128,8 @@ export function renameFolderInWorkspace(
       return nextPath === null ? [] : [nextPath];
     }),
   );
-  const expandedFolderPaths = dedupeExpandedFolderPaths(
-    state.expandedFolderPaths.flatMap((folderPath) => {
+  const expandedFolderPaths = dedupeExpandedFolderPaths([
+    ...state.expandedFolderPaths.flatMap((folderPath) => {
       const nextPath = replaceFolderPrefix(
         normalizeFolderPath(folderPath),
         sourceFolderPath,
@@ -126,7 +137,8 @@ export function renameFolderInWorkspace(
       );
       return nextPath === null ? [] : [nextPath];
     }),
-  );
+    ...(targetFolderPath === null ? [] : getFolderPathAncestors(targetFolderPath)),
+  ]);
 
   return {
     affectedNoteIds,
