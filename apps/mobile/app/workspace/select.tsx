@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-export default function WorkspaceSelectScreen() {
+export function WorkspaceSelectScreen() {
   return (
     <View className="flex-1 bg-[#F5F1E8] px-6 py-10">
       <Text className="text-3xl font-semibold text-[#27500A]">Select a workspace</Text>
@@ -11,3 +11,6 @@ export default function WorkspaceSelectScreen() {
     </View>
   );
 }
+
+// Expo Router のファイルベースルーティングはデフォルトエクスポートを必要とするため再エクスポート
+export default WorkspaceSelectScreen;

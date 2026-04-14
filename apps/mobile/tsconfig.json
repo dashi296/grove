@@ -20,10 +20,6 @@
     "entities/**/*.tsx",
     "shared/**/*.ts",
     "shared/**/*.tsx",
-    "modules/**/*.ts",
-    "modules/**/*.tsx",
-    "nativewind-env.d.ts",
-    "babel.config.js",
-    "metro.config.js"
+    "nativewind-env.d.ts"
   ]
 }

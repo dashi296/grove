@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 
 import { appName } from "@grove/core";
 
-export default function IndexScreen() {
+export function IndexScreen() {
   return (
     <View className="flex-1 justify-center bg-[#F5F1E8] px-6">
       <View className="rounded-[28px] bg-[#EAF3DE] p-6">
@@ -20,3 +20,6 @@ export default function IndexScreen() {
     </View>
   );
 }
+
+// Expo Router のファイルベースルーティングはデフォルトエクスポートを必要とするため再エクスポート
+export default IndexScreen;

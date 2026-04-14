@@ -69,6 +69,8 @@ entities/   # ドメインモデル（Note, Tag, Link）
 shared/     # 汎用UI・ユーティリティ（最下位）
 ```
 
+**デスクトップ例外**: TanStack Router がファイルベースルーティングで `pages/` の役割を担うため、`apps/desktop` に `pages/` ディレクトリは置かない。ルートコンポーネントは `app/routes/` 以下に TanStack Router の規約に従って配置する。
+
 ### ローカルファースト原則
 
 - ノート本文の正本はローカルのMarkdownファイルとする
@@ -154,6 +156,13 @@ export default ({ note, onSelect }) => { ... }
 - スタイルは`NativeWind`のユーティリティクラスを使う
 - プラットフォーム分岐は`Platform.select()`を使い、ファイル分割（`.ios.tsx`）は最小限に
 - `ScrollView`内で`FlatList`をネストしない
+- **Expo Router ルートファイル例外**: `app/` 配下のルートファイルは Expo Router のファイルベースルーティングが default export を必須とするため、named export を定義した上で再エクスポートするパターンを使う
+
+```typescript
+// ✅ Expo Router ルートファイルでの正しいパターン
+export function HomeScreen() { ... }
+export default HomeScreen; // Expo Router 用の再エクスポート
+```
 
 ### Rust（Tauri バックエンド）
 
@@ -305,3 +314,5 @@ type Tag = {
 | 2026-04 | iCloudはAPIではなくフォルダ共有方式で対応 | iCloudはアプリから強制同期できず、Markdownファイルとの相性に技術的課題がある |
 | 2026-04 | 同期なしをデフォルトにする | R2は一般ユーザーに馴染みがない。ローカルファーストの哲学に忠実に「まず使える」を優先する |
 | 2026-04 | R2・iCloudも同梱せずおすすめプラグインとして表示 | 同梱すること自体がR2を特別扱いすることになり、プラグインアーキテクチャの一貫性を損なう |
+| 2026-04 | デスクトップに`pages/`レイヤーを置かない | TanStack Router がファイルベースルーティングで同等の役割を担うため |
+| 2026-04 | Expo Router ルートファイルは named export + default 再エクスポートパターンを採用 | Expo Router がデフォルトエクスポートを必須とするため、named export 禁止ルールとの両立策として採用 |

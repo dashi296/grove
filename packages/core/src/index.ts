@@ -35,6 +35,12 @@ export interface SyncProvider {
   isAvailable(): Promise<boolean>;
 }
 
+export type Tag = {
+  id: string;
+  name: string;
+  noteCount: number;
+};
+
 export type GrovePlugin = {
   id: string;
   name: string;

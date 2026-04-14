@@ -4,7 +4,7 @@ import { Stack } from "expo-router";
 
 import { AppProviders } from "../app.providers/AppProviders";
 
-export default function RootLayout() {
+export function RootLayout() {
   return (
     <AppProviders>
       <Stack
@@ -21,3 +21,6 @@ export default function RootLayout() {
     </AppProviders>
   );
 }
+
+// Expo Router のファイルベースルーティングはデフォルトエクスポートを必要とするため再エクスポート
+export default RootLayout;
