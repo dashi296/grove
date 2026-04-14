@@ -2,17 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": [
-      "DOM",
-      "ES2022"
-    ],
-    "types": [
-      "vite/client"
-    ]
+    "lib": ["DOM", "ES2022"],
+    "types": ["vite/client"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "vite.config.ts"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
 }

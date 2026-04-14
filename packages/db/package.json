@@ -6,11 +6,11 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    "@grove/core": "workspace:*"
-  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@grove/core": "workspace:*"
   }
 }

@@ -1,7 +1,6 @@
 {
   "name": "grove",
   "private": true,
-  "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev:desktop": "pnpm --filter @grove/desktop tauri:dev",
     "dev:mobile": "pnpm --filter @grove/mobile dev",
@@ -21,5 +20,6 @@
     "turbo": "^2.0.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
-  }
+  },
+  "packageManager": "pnpm@9.12.0"
 }

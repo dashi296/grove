@@ -10,8 +10,8 @@ export function IndexScreen() {
         <Text className="text-xs uppercase tracking-[2px] text-[#639922]">Mobile Shell</Text>
         <Text className="mt-3 text-4xl font-semibold text-[#27500A]">{appName}</Text>
         <Text className="mt-4 text-base leading-6 text-[#27500A]">
-          Expo Bare, Expo Router, and NativeWind are connected so the mobile note flows can land without revisiting
-          the workspace setup.
+          Expo Bare, Expo Router, and NativeWind are connected so the mobile note flows can land
+          without revisiting the workspace setup.
         </Text>
         <Link className="mt-6 text-base font-medium text-[#639922]" href="/workspace/select">
           Open workspace setup

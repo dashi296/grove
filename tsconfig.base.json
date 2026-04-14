@@ -12,18 +12,10 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@grove/core": [
-        "packages/core/src/index.ts"
-      ],
-      "@grove/db": [
-        "packages/db/src/index.ts"
-      ],
-      "@grove/editor": [
-        "packages/editor/src/index.ts"
-      ],
-      "@grove/sync": [
-        "packages/sync/src/index.ts"
-      ]
+      "@grove/core": ["packages/core/src/index.ts"],
+      "@grove/db": ["packages/db/src/index.ts"],
+      "@grove/editor": ["packages/editor/src/index.ts"],
+      "@grove/sync": ["packages/sync/src/index.ts"]
     }
   }
 }

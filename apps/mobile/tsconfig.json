@@ -2,12 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022"
-    ],
-    "types": [
-      "nativewind/types"
-    ]
+    "lib": ["ES2022"],
+    "types": ["nativewind/types"]
   },
   "include": [
     "app/**/*.ts",

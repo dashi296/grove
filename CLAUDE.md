@@ -175,34 +175,34 @@ export default HomeScreen; // Expo Router 用の再エクスポート
 ```typescript
 // stores/useNoteStore.ts
 type NoteTab = {
-  id: string
-  noteId: string
-}
+  id: string;
+  noteId: string;
+};
 
 type NotePane = {
-  id: string
-  tabs: NoteTab[]
-  activeTabId: string | null
-}
+  id: string;
+  tabs: NoteTab[];
+  activeTabId: string | null;
+};
 
 type NoteStore = {
-  notes: Note[]
-  panes: NotePane[]
-  activePaneId: string | null
-  activeNoteId: string | null
-  openNoteIds: string[]
-  openNoteInActivePane: (id: string) => void
-  openNoteInNewPane: (id: string) => void
-  moveTabToPane: (tabId: string, targetPaneId: string) => void
-  reorderTabs: (paneId: string, tabIds: string[]) => void
-  closeNote: (id: string) => void
-  closeTab: (paneId: string, tabId: string) => void
-  closePane: (paneId: string) => void
-  setActivePane: (paneId: string) => void
-  setActiveNote: (id: string) => void
-  setActiveTab: (paneId: string, tabId: string) => void
-  addNote: (note: Note) => void
-}
+  notes: Note[];
+  panes: NotePane[];
+  activePaneId: string | null;
+  activeNoteId: string | null;
+  openNoteIds: string[];
+  openNoteInActivePane: (id: string) => void;
+  openNoteInNewPane: (id: string) => void;
+  moveTabToPane: (tabId: string, targetPaneId: string) => void;
+  reorderTabs: (paneId: string, tabIds: string[]) => void;
+  closeNote: (id: string) => void;
+  closeTab: (paneId: string, tabId: string) => void;
+  closePane: (paneId: string) => void;
+  setActivePane: (paneId: string) => void;
+  setActiveNote: (id: string) => void;
+  setActiveTab: (paneId: string, tabId: string) => void;
+  addNote: (note: Note) => void;
+};
 ```
 
 - `panes`を正本にし、各ペインは`tabs`と`activeTabId`を持つ。表示中のノートはアクティブタブから導出する
@@ -232,43 +232,43 @@ type NoteStore = {
 // packages/core/src/types.ts
 
 type Note = {
-  id: string           // UUID v4
-  title: string
-  content: string      // Markdownテキスト
-  filePath: string     // ローカルファイルパス
-  tags: string[]
-  links: NoteLink[]    // [[WikiLink]]の解析結果
-  createdAt: Date
-  updatedAt: Date
-  syncedAt: Date | null
-}
+  id: string; // UUID v4
+  title: string;
+  content: string; // Markdownテキスト
+  filePath: string; // ローカルファイルパス
+  tags: string[];
+  links: NoteLink[]; // [[WikiLink]]の解析結果
+  createdAt: Date;
+  updatedAt: Date;
+  syncedAt: Date | null;
+};
 
 type NoteLink = {
-  fromId: string
-  toId: string
-  alias: string | null  // [[タイトル|エイリアス]]
-}
+  fromId: string;
+  toId: string;
+  alias: string | null; // [[タイトル|エイリアス]]
+};
 
 type Tag = {
-  id: string
-  name: string
-  noteCount: number
-}
+  id: string;
+  name: string;
+  noteCount: number;
+};
 ```
 
 ---
 
 ## ファイル命名規則
 
-| 種類 | 規則 | 例 |
-|---|---|---|
-| Reactコンポーネント | PascalCase | `NoteCard.tsx` |
-| カスタムフック | camelCase + `use` prefix | `useNoteSearch.ts` |
-| ストア | camelCase + `Store` suffix | `useNoteStore.ts` |
-| ユーティリティ | camelCase | `parseWikiLinks.ts` |
-| 型定義 | camelCase | `types.ts` |
-| テスト | 同名 + `.test.ts` | `parseWikiLinks.test.ts` |
-| Rustモジュール | snake_case | `file_watcher.rs` |
+| 種類                | 規則                       | 例                       |
+| ------------------- | -------------------------- | ------------------------ |
+| Reactコンポーネント | PascalCase                 | `NoteCard.tsx`           |
+| カスタムフック      | camelCase + `use` prefix   | `useNoteSearch.ts`       |
+| ストア              | camelCase + `Store` suffix | `useNoteStore.ts`        |
+| ユーティリティ      | camelCase                  | `parseWikiLinks.ts`      |
+| 型定義              | camelCase                  | `types.ts`               |
+| テスト              | 同名 + `.test.ts`          | `parseWikiLinks.test.ts` |
+| Rustモジュール      | snake_case                 | `file_watcher.rs`        |
 
 ---
 
@@ -304,15 +304,15 @@ type Tag = {
 
 ## 意思決定ログ
 
-| 日付 | 決定事項 | 理由 |
-|---|---|---|
-| 2026-04 | デスクトップはTauri（Electronではなく） | 起動速度・メモリ消費・バンドルサイズ |
-| 2026-04 | モバイルはReact Native Expo Bare（Capacitorではなく） | Obsidianのモバイル体験の根本原因がCapacitorのデスクトップ流用のため |
-| 2026-04 | AI機能はプラグインに分離 | コアの複雑性を下げる・API費用を任意にする |
-| 2026-04 | FSD（Feature Sliced Design）採用 | デスクトップ・モバイルで同一アーキテクチャを維持するため |
-| 2026-04 | 同期バックエンドをすべてプラグイン化（R2含む） | コアをストレージ非依存にする。R2だけ特別扱いする理由がない |
-| 2026-04 | iCloudはAPIではなくフォルダ共有方式で対応 | iCloudはアプリから強制同期できず、Markdownファイルとの相性に技術的課題がある |
-| 2026-04 | 同期なしをデフォルトにする | R2は一般ユーザーに馴染みがない。ローカルファーストの哲学に忠実に「まず使える」を優先する |
-| 2026-04 | R2・iCloudも同梱せずおすすめプラグインとして表示 | 同梱すること自体がR2を特別扱いすることになり、プラグインアーキテクチャの一貫性を損なう |
-| 2026-04 | デスクトップに`pages/`レイヤーを置かない | TanStack Router がファイルベースルーティングで同等の役割を担うため（TanStack Start は不使用） |
+| 日付    | 決定事項                                                                         | 理由                                                                                              |
+| ------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 2026-04 | デスクトップはTauri（Electronではなく）                                          | 起動速度・メモリ消費・バンドルサイズ                                                              |
+| 2026-04 | モバイルはReact Native Expo Bare（Capacitorではなく）                            | Obsidianのモバイル体験の根本原因がCapacitorのデスクトップ流用のため                               |
+| 2026-04 | AI機能はプラグインに分離                                                         | コアの複雑性を下げる・API費用を任意にする                                                         |
+| 2026-04 | FSD（Feature Sliced Design）採用                                                 | デスクトップ・モバイルで同一アーキテクチャを維持するため                                          |
+| 2026-04 | 同期バックエンドをすべてプラグイン化（R2含む）                                   | コアをストレージ非依存にする。R2だけ特別扱いする理由がない                                        |
+| 2026-04 | iCloudはAPIではなくフォルダ共有方式で対応                                        | iCloudはアプリから強制同期できず、Markdownファイルとの相性に技術的課題がある                      |
+| 2026-04 | 同期なしをデフォルトにする                                                       | R2は一般ユーザーに馴染みがない。ローカルファーストの哲学に忠実に「まず使える」を優先する          |
+| 2026-04 | R2・iCloudも同梱せずおすすめプラグインとして表示                                 | 同梱すること自体がR2を特別扱いすることになり、プラグインアーキテクチャの一貫性を損なう            |
+| 2026-04 | デスクトップに`pages/`レイヤーを置かない                                         | TanStack Router がファイルベースルーティングで同等の役割を担うため（TanStack Start は不使用）     |
 | 2026-04 | Expo Router ルートファイルは named export + default 再エクスポートパターンを採用 | Expo Router がデフォルトエクスポートを必須とするため、named export 禁止ルールとの両立策として採用 |
