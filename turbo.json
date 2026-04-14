@@ -6,8 +6,16 @@
         "^build"
       ],
       "outputs": [
+        "dist/**"
+      ]
+    },
+    "@grove/desktop#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
         "dist/**",
-        "apps/desktop/src-tauri/target/**"
+        "src-tauri/target/release/bundle/**"
       ]
     },
     "typecheck": {

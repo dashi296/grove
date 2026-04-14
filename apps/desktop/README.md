@@ -35,8 +35,6 @@
 ### 初期実装で採用するライブラリ
 
 - `@tauri-apps/api`
-- `@tanstack/react-start`
-- `@tanstack/react-router`
 - `zustand`
 - `@tanstack/react-query`
 - `valibot`

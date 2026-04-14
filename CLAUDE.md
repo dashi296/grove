@@ -69,7 +69,7 @@ entities/   # ドメインモデル（Note, Tag, Link）
 shared/     # 汎用UI・ユーティリティ（最下位）
 ```
 
-**デスクトップ例外**: TanStack Router がファイルベースルーティングで `pages/` の役割を担うため、`apps/desktop` に `pages/` ディレクトリは置かない。ルートコンポーネントは `app/routes/` 以下に TanStack Router の規約に従って配置する。
+**デスクトップ例外**: `apps/desktop` は Vite + React による単純な SPA シェルとして構成するため、`pages/` ディレクトリは置かない。TanStack Router や TanStack Start は使用しない。ルーティングが必要になった時点で改めて検討する。
 
 ### ローカルファースト原則
 
@@ -314,5 +314,5 @@ type Tag = {
 | 2026-04 | iCloudはAPIではなくフォルダ共有方式で対応 | iCloudはアプリから強制同期できず、Markdownファイルとの相性に技術的課題がある |
 | 2026-04 | 同期なしをデフォルトにする | R2は一般ユーザーに馴染みがない。ローカルファーストの哲学に忠実に「まず使える」を優先する |
 | 2026-04 | R2・iCloudも同梱せずおすすめプラグインとして表示 | 同梱すること自体がR2を特別扱いすることになり、プラグインアーキテクチャの一貫性を損なう |
-| 2026-04 | デスクトップに`pages/`レイヤーを置かない | TanStack Router がファイルベースルーティングで同等の役割を担うため |
+| 2026-04 | デスクトップに`pages/`レイヤーを置かない。TanStack Start / TanStack Router は不使用 | Tauri の SPA 構成では Vite + React で十分。SSR や高度なルーティングは不要 |
 | 2026-04 | Expo Router ルートファイルは named export + default 再エクスポートパターンを採用 | Expo Router がデフォルトエクスポートを必須とするため、named export 禁止ルールとの両立策として採用 |
