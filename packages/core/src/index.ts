@@ -1,5 +1,20 @@
 export const appName = "Grove";
 
+export {
+  buildFolderTree,
+  compareWorkspacePaths,
+  getFolderDisplayName,
+  getFolderPathForNote,
+  getWorkspacePathDepth,
+  isNoteInFolderScope,
+  moveNoteToFolder,
+  normalizeFolderPath,
+  normalizeFolderScope,
+  normalizeNoteFilePath,
+  renameFolderInNotePath,
+} from "./folders";
+export type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "./folders";
+
 export type NoteLink = {
   fromId: string;
   toId: string;

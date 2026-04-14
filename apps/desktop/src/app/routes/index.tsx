@@ -1,5 +1,5 @@
-import { ShellCard } from "../../shared";
+import { FolderNavigationWorkspace } from "../../features/folder-navigation";
 
 export function HomeRoute() {
-  return <ShellCard />;
+  return <FolderNavigationWorkspace />;
 }

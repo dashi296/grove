@@ -98,6 +98,36 @@ WikiLink はプラグインではなくコア責務です。
 `core` の `LinkResolver` は純粋関数として定義します。
 `packages/db` はその解決ルールを呼び出して index を更新する orchestration を担当し、独自の解決ロジックは持ちません。
 
+## フォルダ path semantics
+
+フォルダ階層は `Note.filePath` から導出します。
+`Note` に独立した `folderId` や親子関係の正本は持たせず、Markdown ファイルの workspace 相対 path を正本にします。
+
+公開型:
+
+- `NoteFilePath`: workspace 相対の Markdown ファイル path
+- `FolderPath`: workspace 相対の folder path
+- `FolderScope`: `FolderPath | null`
+- `FolderTreeNode`: folder tree 表示や scoped note list の入力に使う派生構造
+
+path の不変条件:
+
+- separator は `/` に正規化する
+- 絶対 path と Windows drive prefix は許可しない
+- `.` と `..` segment は許可しない
+- workspace root の folder scope は `null` で表す
+- note file path は `.md` / `.MD` など Markdown 拡張子を必須にする
+
+move / rename semantics:
+
+- note move は note file name を維持し、target `FolderScope` へ path prefix を付け替える
+- folder rename は対象 folder 配下の note path prefix だけを置き換える
+- root への移動や rename は target `FolderScope` を `null` にする
+- folder tree と note count は `NoteFilePath[]` と必要に応じた明示的な空 folder list から再構築する
+
+リンク、タグ、その他 metadata は folder 階層の正本ではありません。
+folder path 変更後は `packages/db` が `core` の path semantics と WikiLink 解決ルールを呼び、SQLite index を再構築または更新します。
+
 ## app-host 境界
 
 `core` には host 依存を隔離するための抽象を置きます。
