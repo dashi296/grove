@@ -4,10 +4,13 @@ import {
   getFolderDisplayName,
   getFolderPathForNote,
   isNoteInFolderScope,
+  moveNoteToFolder,
   normalizeFolderPath,
+  normalizeFolderScope,
   normalizeNoteFilePath,
+  renameFolderInNotePath,
 } from "@grove/core";
-import type { FolderScope, FolderTreeNode, NoteFilePath } from "@grove/core";
+import type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "@grove/core";
 import { useMemo, useState } from "react";
 
 import "./FolderNavigationWorkspace.css";
@@ -28,6 +31,7 @@ type FolderNodeProps = {
 };
 
 type SidebarProps = {
+  noteCount: number;
   folderTree: readonly FolderTreeNode[];
   selectedFolderPath: FolderScope;
   expandedFolderPaths: readonly string[];
@@ -38,9 +42,25 @@ type SidebarProps = {
 type NoteListProps = {
   selectedFolderPath: FolderScope;
   scopedNotes: readonly NoteListItem[];
+  selectedNoteId: string;
+  onSelectNote: (noteId: string) => void;
 };
 
-const notes: readonly NoteListItem[] = [
+type FolderOption = {
+  path: FolderScope;
+  label: string;
+};
+
+type ActivePaneProps = {
+  notes: readonly NoteListItem[];
+  folderOptions: readonly FolderOption[];
+  selectedFolderPath: FolderScope;
+  selectedNoteId: string;
+  onMoveSelectedNote: (targetFolderPath: FolderScope) => void;
+  onRenameSelectedFolder: (targetFolderPath: FolderScope) => void;
+};
+
+const initialNotes: readonly NoteListItem[] = [
   {
     id: "note-inbox",
     title: "Daily capture",
@@ -73,7 +93,7 @@ const notes: readonly NoteListItem[] = [
   },
 ];
 
-const explicitFolders = [
+const initialExplicitFolders = [
   normalizeFolderPath("Projects/Grove/Ideas"),
   normalizeFolderPath("Reading"),
 ] as const;
@@ -87,6 +107,43 @@ function filterNotesByFolderScope(
 
 function getFolderLabel(folderPath: FolderScope): string {
   return folderPath === null ? "Workspace" : getFolderDisplayName(folderPath);
+}
+
+function getFolderPathLabel(folderPath: FolderScope): string {
+  return folderPath === null ? "Workspace root" : folderPath;
+}
+
+function flattenFolderTree(folderTree: readonly FolderTreeNode[]): FolderOption[] {
+  return folderTree.flatMap((node) => [
+    { path: node.path, label: node.path },
+    ...flattenFolderTree(node.children),
+  ]);
+}
+
+function replaceFolderPrefix(
+  folderPath: FolderPath,
+  fromFolderPath: FolderPath,
+  toFolderPath: FolderScope,
+): FolderScope {
+  if (folderPath !== fromFolderPath && !folderPath.startsWith(`${fromFolderPath}/`)) {
+    return folderPath;
+  }
+
+  const suffix = folderPath === fromFolderPath ? "" : folderPath.slice(fromFolderPath.length + 1);
+
+  if (toFolderPath === null) {
+    return suffix === "" ? null : normalizeFolderPath(suffix);
+  }
+
+  return normalizeFolderPath(suffix === "" ? toFolderPath : `${toFolderPath}/${suffix}`);
+}
+
+function isDescendantFolderPath(folderPath: FolderPath, parentFolderPath: FolderPath): boolean {
+  return folderPath.startsWith(`${parentFolderPath}/`);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The folder path is invalid.";
 }
 
 function FolderNode({
@@ -148,6 +205,7 @@ function FolderNode({
 }
 
 function Sidebar({
+  noteCount,
   folderTree,
   selectedFolderPath,
   expandedFolderPaths,
@@ -169,7 +227,7 @@ function Sidebar({
         aria-pressed={selectedFolderPath === null}
       >
         <span>All notes</span>
-        <span>{notes.length}</span>
+        <span>{noteCount}</span>
       </button>
       <ol className="folder-navigation__tree folder-navigation__tree--root">
         {folderTree.map((node) => (
@@ -187,7 +245,12 @@ function Sidebar({
   );
 }
 
-function NoteList({ selectedFolderPath, scopedNotes }: NoteListProps) {
+function NoteList({
+  selectedFolderPath,
+  scopedNotes,
+  selectedNoteId,
+  onSelectNote,
+}: NoteListProps) {
   return (
     <section className="folder-navigation__note-list" aria-label="Notes">
       <p className="folder-navigation__eyebrow">{getFolderLabel(selectedFolderPath)}</p>
@@ -196,10 +259,21 @@ function NoteList({ selectedFolderPath, scopedNotes }: NoteListProps) {
         <ol className="folder-navigation__notes">
           {scopedNotes.map((note) => (
             <li key={note.id} className="folder-navigation__note">
-              <h3 className="folder-navigation__note-title">{note.title}</h3>
-              <p className="folder-navigation__muted">
-                {getFolderDisplayName(getFolderPathForNote(note.path))} · {note.updatedLabel}
-              </p>
+              <button
+                type="button"
+                className={
+                  note.id === selectedNoteId
+                    ? "folder-navigation__note-button folder-navigation__note-button--selected"
+                    : "folder-navigation__note-button"
+                }
+                onClick={() => onSelectNote(note.id)}
+                aria-pressed={note.id === selectedNoteId}
+              >
+                <span className="folder-navigation__note-title">{note.title}</span>
+                <span className="folder-navigation__muted">
+                  {getFolderDisplayName(getFolderPathForNote(note.path))} · {note.updatedLabel}
+                </span>
+              </button>
             </li>
           ))}
         </ol>
@@ -213,20 +287,122 @@ function NoteList({ selectedFolderPath, scopedNotes }: NoteListProps) {
   );
 }
 
-function ActivePane() {
+function ActivePane({
+  notes,
+  folderOptions,
+  selectedFolderPath,
+  selectedNoteId,
+  onMoveSelectedNote,
+  onRenameSelectedFolder,
+}: ActivePaneProps) {
+  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
+  const [moveTargetPath, setMoveTargetPath] = useState<string>("");
+  const [renameTargetPath, setRenameTargetPath] = useState<string>("Projects/Work");
+  const [operationMessage, setOperationMessage] = useState<string>(
+    "Path changes refresh the folder tree and note list immediately.",
+  );
+
+  function moveSelectedNote(): void {
+    try {
+      onMoveSelectedNote(normalizeFolderScope(moveTargetPath));
+      setOperationMessage("Moved the note and refreshed folder counts.");
+    } catch (error) {
+      setOperationMessage(getErrorMessage(error));
+    }
+  }
+
+  function renameSelectedFolder(): void {
+    try {
+      const targetFolderPath = normalizeFolderScope(renameTargetPath);
+
+      if (
+        selectedFolderPath !== null &&
+        targetFolderPath !== null &&
+        isDescendantFolderPath(targetFolderPath, selectedFolderPath)
+      ) {
+        setOperationMessage("Choose a folder outside the selected folder.");
+        return;
+      }
+
+      onRenameSelectedFolder(targetFolderPath);
+      setOperationMessage("Renamed the folder and refreshed affected note paths.");
+    } catch (error) {
+      setOperationMessage(getErrorMessage(error));
+    }
+  }
+
   return (
     <section className="folder-navigation__pane">
       <p className="folder-navigation__eyebrow">Active pane</p>
-      <h2 className="folder-navigation__heading">Workspace Plan</h2>
+      <h2 className="folder-navigation__heading">{selectedNote?.title ?? "No note selected"}</h2>
       <div className="folder-navigation__editor">
-        <p>Keep the current draft open while moving through nearby project notes.</p>
+        {selectedNote === undefined ? (
+          <p>Select a note to manage its workspace path.</p>
+        ) : (
+          <>
+            <p>Path: {selectedNote.path}</p>
+            <div className="folder-navigation__operation">
+              <label className="folder-navigation__label" htmlFor="move-note-target">
+                Move selected note
+              </label>
+              <select
+                id="move-note-target"
+                className="folder-navigation__select"
+                value={moveTargetPath}
+                onChange={(event) => setMoveTargetPath(event.target.value)}
+              >
+                <option value="">Workspace root</option>
+                {folderOptions.map((option) => (
+                  <option key={option.path ?? "root"} value={option.path ?? ""}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="folder-navigation__action"
+                onClick={moveSelectedNote}
+              >
+                Move note
+              </button>
+            </div>
+          </>
+        )}
+        <div className="folder-navigation__operation">
+          <label className="folder-navigation__label" htmlFor="rename-folder-target">
+            Rename selected folder
+          </label>
+          <input
+            id="rename-folder-target"
+            className="folder-navigation__input"
+            value={renameTargetPath}
+            onChange={(event) => setRenameTargetPath(event.target.value)}
+            disabled={selectedFolderPath === null}
+          />
+          <button
+            type="button"
+            className="folder-navigation__action"
+            onClick={renameSelectedFolder}
+            disabled={selectedFolderPath === null}
+          >
+            Rename folder
+          </button>
+          <p className="folder-navigation__muted">
+            Current folder: {getFolderPathLabel(selectedFolderPath)}
+          </p>
+          <p className="folder-navigation__muted">{operationMessage}</p>
+        </div>
       </div>
     </section>
   );
 }
 
 export function FolderNavigationWorkspace() {
+  const [notes, setNotes] = useState<readonly NoteListItem[]>(initialNotes);
+  const [explicitFolders, setExplicitFolders] =
+    useState<readonly FolderPath[]>(initialExplicitFolders);
   const [selectedFolderPath, setSelectedFolderPath] = useState<FolderScope>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[1]?.id ?? "");
   const [expandedFolderPaths, setExpandedFolderPaths] = useState<readonly string[]>([
     "Projects",
     "Projects/Grove",
@@ -237,10 +413,13 @@ export function FolderNavigationWorkspace() {
       notes.map((note) => note.path),
       explicitFolders,
     );
-  }, []);
+  }, [explicitFolders, notes]);
+  const folderOptions = useMemo(() => {
+    return flattenFolderTree(folderTree);
+  }, [folderTree]);
   const scopedNotes = useMemo(() => {
     return filterNotesByFolderScope(notes, selectedFolderPath);
-  }, [selectedFolderPath]);
+  }, [notes, selectedFolderPath]);
 
   function toggleFolder(path: string): void {
     setExpandedFolderPaths((currentPaths) => {
@@ -252,17 +431,71 @@ export function FolderNavigationWorkspace() {
     });
   }
 
+  function moveSelectedNote(targetFolderPath: FolderScope): void {
+    setNotes((currentNotes) =>
+      currentNotes.map((note) =>
+        note.id === selectedNoteId
+          ? { ...note, path: moveNoteToFolder(note.path, targetFolderPath) }
+          : note,
+      ),
+    );
+    setSelectedFolderPath(targetFolderPath);
+  }
+
+  function renameSelectedFolder(targetFolderPath: FolderScope): void {
+    if (selectedFolderPath === null) {
+      return;
+    }
+
+    setNotes((currentNotes) =>
+      currentNotes.map((note) => ({
+        ...note,
+        path: renameFolderInNotePath(note.path, selectedFolderPath, targetFolderPath),
+      })),
+    );
+    setExplicitFolders((currentFolders) =>
+      currentFolders.flatMap((folderPath) => {
+        const nextPath = replaceFolderPrefix(folderPath, selectedFolderPath, targetFolderPath);
+        return nextPath === null ? [] : [nextPath];
+      }),
+    );
+    setExpandedFolderPaths((currentPaths) =>
+      currentPaths.flatMap((folderPath) => {
+        const nextPath = replaceFolderPrefix(
+          normalizeFolderPath(folderPath),
+          selectedFolderPath,
+          targetFolderPath,
+        );
+        return nextPath === null ? [] : [nextPath];
+      }),
+    );
+    setSelectedFolderPath(targetFolderPath);
+  }
+
   return (
     <section className="folder-navigation">
       <Sidebar
+        noteCount={notes.length}
         folderTree={folderTree}
         selectedFolderPath={selectedFolderPath}
         expandedFolderPaths={expandedFolderPaths}
         onSelect={setSelectedFolderPath}
         onToggle={toggleFolder}
       />
-      <NoteList selectedFolderPath={selectedFolderPath} scopedNotes={scopedNotes} />
-      <ActivePane />
+      <NoteList
+        selectedFolderPath={selectedFolderPath}
+        scopedNotes={scopedNotes}
+        selectedNoteId={selectedNoteId}
+        onSelectNote={setSelectedNoteId}
+      />
+      <ActivePane
+        notes={notes}
+        folderOptions={folderOptions}
+        selectedFolderPath={selectedFolderPath}
+        selectedNoteId={selectedNoteId}
+        onMoveSelectedNote={moveSelectedNote}
+        onRenameSelectedFolder={renameSelectedFolder}
+      />
     </section>
   );
 }

@@ -125,6 +125,14 @@ move / rename semantics:
 - root への移動や rename は target `FolderScope` を `null` にする
 - folder tree と note count は `NoteFilePath[]` と必要に応じた明示的な空 folder list から再構築する
 
+path 変更後の一貫性:
+
+- file I/O は app-host の責務とし、`core` は path 変換と検証だけを提供する
+- note move / folder rename が成功したら、app は `Note.filePath` と明示的な空 folder list を同じ変更単位で更新する
+- SQLite index は Markdown ファイルの正本から再構築できる派生状態として扱い、path 変更後に `packages/db` の Public API 経由で更新する
+- watcher や index 更新が途中失敗しても Markdown ファイルを正本とし、次回 scan で index を再同期できる状態を維持する
+- folder tree、scoped note list、note count は保存せず、更新後の path 集合から再導出する
+
 リンク、タグ、その他 metadata は folder 階層の正本ではありません。
 folder path 変更後は `packages/db` が `core` の path semantics と WikiLink 解決ルールを呼び、SQLite index を再構築または更新します。
 
