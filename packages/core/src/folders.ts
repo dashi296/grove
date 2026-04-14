@@ -17,7 +17,7 @@ type MutableFolderTreeNode = Omit<FolderTreeNode, "children"> & {
   children: MutableFolderTreeNode[];
 };
 
-const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
+const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:/;
 
 function normalizeWorkspacePath(input: string): string {
   if (input.length === 0) {

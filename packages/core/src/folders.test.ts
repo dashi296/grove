@@ -20,6 +20,7 @@ describe("folder path semantics", () => {
     expect(() => normalizeFolderPath("/Projects")).toThrow("must not be absolute");
     expect(() => normalizeFolderPath("Projects/../Secrets")).toThrow("must not include dot");
     expect(() => normalizeFolderPath("C:\\Users\\Notes")).toThrow("must not include a drive");
+    expect(() => normalizeFolderPath("C:Users\\Notes")).toThrow("must not include a drive");
   });
 
   it("uses null as the workspace root folder scope", () => {
