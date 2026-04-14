@@ -1,1 +1,1 @@
-export {};
+export { ShellCard } from "./ui/ShellCard";

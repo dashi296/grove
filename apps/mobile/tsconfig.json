@@ -12,8 +12,8 @@
   "include": [
     "app/**/*.ts",
     "app/**/*.tsx",
-    "app.providers/**/*.ts",
-    "app.providers/**/*.tsx",
+    "providers/**/*.ts",
+    "providers/**/*.tsx",
     "features/**/*.ts",
     "features/**/*.tsx",
     "entities/**/*.ts",

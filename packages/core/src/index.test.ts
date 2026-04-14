@@ -18,5 +18,11 @@ describe("definePlugin", () => {
 
     expect(plugin.id).toBe("test.plugin");
     expect(plugin.name).toBe("Test Plugin");
+    expect(plugin.provides).toStrictEqual({});
+  });
+
+  it("returns the same object reference", () => {
+    const input = { id: "ref.plugin", name: "Ref Plugin", provides: {} };
+    expect(definePlugin(input)).toBe(input);
   });
 });

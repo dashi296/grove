@@ -1,4 +1,4 @@
-import { ShellCard } from "../shared/ui/ShellCard";
+import { ShellCard } from "../shared";
 
 export function App() {
   return (

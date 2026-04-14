@@ -19,18 +19,19 @@
       ]
     },
     "typecheck": {
-      "dependsOn": [
-        "^typecheck"
-      ],
+      "dependsOn": [],
       "outputs": []
     },
     "test": {
       "dependsOn": [
-        "^test"
+        "^build"
       ],
       "outputs": [
         "coverage/**"
       ]
+    },
+    "lint": {
+      "outputs": []
     }
   }
 }
