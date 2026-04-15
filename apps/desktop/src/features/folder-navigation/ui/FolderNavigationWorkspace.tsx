@@ -30,9 +30,11 @@ import {
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
 import {
+  canSaveNoteEditBuffer,
   createCleanNoteEditBuffer,
   createErroredNoteEditBuffer,
   discardNoteEditDraft,
+  isNoteEditBufferBlockingWorkspaceChange,
   markNoteEditBufferSaved,
   markNoteEditBufferSaveFailed,
   markNoteEditBufferSaving,
@@ -232,10 +234,6 @@ function getNoteReadErrorMessage(error: unknown): string {
 
 function getNoteSaveErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be saved.";
-}
-
-function isDraftBlockingWorkspaceChange(buffer: NoteEditBuffer | null): boolean {
-  return buffer?.status === "dirty" || buffer?.status === "saving";
 }
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
@@ -820,7 +818,7 @@ export function FolderNavigationWorkspace() {
   function selectNote(noteId: string): void {
     if (
       noteEditBuffer !== null &&
-      isDraftBlockingWorkspaceChange(noteEditBuffer) &&
+      isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer) &&
       noteEditBuffer.noteId !== noteId &&
       selectedNoteId !== noteId
     ) {
@@ -833,7 +831,7 @@ export function FolderNavigationWorkspace() {
   }
 
   function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
-    if (isDraftBlockingWorkspaceChange(noteEditBuffer)) {
+    if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
       throw new Error("Save or discard the current draft before moving notes.");
     }
 
@@ -844,7 +842,7 @@ export function FolderNavigationWorkspace() {
   }
 
   function renameSelectedFolder(targetFolderPath: FolderScope): FolderWorkspaceMutation {
-    if (isDraftBlockingWorkspaceChange(noteEditBuffer)) {
+    if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
       throw new Error("Save or discard the current draft before renaming folders.");
     }
 
@@ -922,11 +920,7 @@ export function FolderNavigationWorkspace() {
   const saveSelectedNoteDraft = useCallback(async (): Promise<void> => {
     const buffer = noteEditBuffer;
 
-    if (
-      buffer === null ||
-      buffer.status !== "dirty" ||
-      savingNoteIdSet.current.has(buffer.noteId)
-    ) {
+    if (!canSaveNoteEditBuffer(buffer) || savingNoteIdSet.current.has(buffer.noteId)) {
       return;
     }
 
@@ -1084,6 +1078,10 @@ export function FolderNavigationWorkspace() {
         return;
       }
 
+      if (!canSaveNoteEditBuffer(noteEditBuffer)) {
+        return;
+      }
+
       event.preventDefault();
       void saveSelectedNoteDraft();
     }
@@ -1093,7 +1091,7 @@ export function FolderNavigationWorkspace() {
     return () => {
       window.removeEventListener("keydown", saveOnKeyboardShortcut);
     };
-  }, [saveSelectedNoteDraft]);
+  }, [noteEditBuffer, saveSelectedNoteDraft]);
 
   return (
     <section className="folder-navigation">

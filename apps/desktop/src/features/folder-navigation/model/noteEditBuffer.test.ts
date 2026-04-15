@@ -2,9 +2,11 @@ import { normalizeNoteFilePath } from "@grove/core";
 import { describe, expect, it } from "vitest";
 
 import {
+  canSaveNoteEditBuffer,
   createCleanNoteEditBuffer,
   createErroredNoteEditBuffer,
   discardNoteEditDraft,
+  isNoteEditBufferBlockingWorkspaceChange,
   markNoteEditBufferSaved,
   markNoteEditBufferSaveFailed,
   markNoteEditBufferSaving,
@@ -40,6 +42,32 @@ describe("note edit buffer", () => {
     );
 
     expect(updateNoteEditDraft(buffer, "# Plan").status).toBe("clean");
+  });
+
+  it("only allows dirty buffers to be saved", () => {
+    const cleanBuffer = createCleanNoteEditBuffer("note-plan", notePath, "# Plan");
+    const dirtyBuffer = updateNoteEditDraft(cleanBuffer, "# Plan\n\nNext");
+    const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
+    const erroredBuffer = createErroredNoteEditBuffer("note-plan", notePath, "Disk read failed.");
+
+    expect(canSaveNoteEditBuffer(null)).toBe(false);
+    expect(canSaveNoteEditBuffer(cleanBuffer)).toBe(false);
+    expect(canSaveNoteEditBuffer(dirtyBuffer)).toBe(true);
+    expect(canSaveNoteEditBuffer(savingBuffer)).toBe(false);
+    expect(canSaveNoteEditBuffer(erroredBuffer)).toBe(false);
+  });
+
+  it("blocks workspace changes only while dirty or saving", () => {
+    const cleanBuffer = createCleanNoteEditBuffer("note-plan", notePath, "# Plan");
+    const dirtyBuffer = updateNoteEditDraft(cleanBuffer, "# Plan\n\nNext");
+    const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
+    const erroredBuffer = createErroredNoteEditBuffer("note-plan", notePath, "Disk read failed.");
+
+    expect(isNoteEditBufferBlockingWorkspaceChange(null)).toBe(false);
+    expect(isNoteEditBufferBlockingWorkspaceChange(cleanBuffer)).toBe(false);
+    expect(isNoteEditBufferBlockingWorkspaceChange(dirtyBuffer)).toBe(true);
+    expect(isNoteEditBufferBlockingWorkspaceChange(savingBuffer)).toBe(true);
+    expect(isNoteEditBufferBlockingWorkspaceChange(erroredBuffer)).toBe(false);
   });
 
   it("keeps a failed save dirty without discarding the draft", () => {

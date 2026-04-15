@@ -11,6 +11,10 @@ export type NoteEditBuffer = {
   errorMessage: string | null;
 };
 
+type DirtyNoteEditBuffer = NoteEditBuffer & {
+  status: "dirty";
+};
+
 export function createCleanNoteEditBuffer(
   noteId: string,
   path: NoteFilePath,
@@ -56,6 +60,16 @@ export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer
     status: "saving",
     errorMessage: null,
   };
+}
+
+export function canSaveNoteEditBuffer(
+  buffer: NoteEditBuffer | null,
+): buffer is DirtyNoteEditBuffer {
+  return buffer?.status === "dirty";
+}
+
+export function isNoteEditBufferBlockingWorkspaceChange(buffer: NoteEditBuffer | null): boolean {
+  return buffer?.status === "dirty" || buffer?.status === "saving";
 }
 
 export function markNoteEditBufferSaveFailed(
