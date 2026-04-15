@@ -73,6 +73,18 @@ describe("desktop command wrappers", () => {
     await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
   });
 
+  it("rejects non-finite Markdown workspace scan timestamps", async () => {
+    invokeMock.mockResolvedValue([
+      {
+        path: "Projects/Grove/Plan.md",
+        title: "Plan",
+        updatedAtUnixMs: Number.POSITIVE_INFINITY,
+      },
+    ]);
+
+    await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
+  });
+
   it("preserves structured Tauri command messages when a command fails", async () => {
     invokeMock.mockRejectedValue({
       code: "file_move_failed",

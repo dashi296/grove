@@ -88,6 +88,8 @@ function isScannedMarkdownNote(value: unknown): value is ScannedMarkdownNote {
     "title" in value &&
     typeof value.title === "string" &&
     "updatedAtUnixMs" in value &&
-    typeof value.updatedAtUnixMs === "number"
+    typeof value.updatedAtUnixMs === "number" &&
+    Number.isFinite(value.updatedAtUnixMs) &&
+    value.updatedAtUnixMs >= 0
   );
 }

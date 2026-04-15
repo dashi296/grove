@@ -305,7 +305,7 @@ fn find_first_markdown_heading(content: &str) -> Option<String> {
             continue;
         }
 
-        let title = heading_body.trim().trim_end_matches('#').trim();
+        let title = strip_closing_heading_marker(heading_body.trim());
 
         if title.is_empty() {
             continue;
@@ -315,6 +315,21 @@ fn find_first_markdown_heading(content: &str) -> Option<String> {
     }
 
     None
+}
+
+fn strip_closing_heading_marker(title: &str) -> &str {
+    let trimmed_title = title.trim_end();
+    let without_hashes = trimmed_title.trim_end_matches('#');
+
+    if without_hashes.len() == trimmed_title.len() {
+        return trimmed_title;
+    }
+
+    if without_hashes.chars().next_back().is_some_and(char::is_whitespace) {
+        return without_hashes.trim_end();
+    }
+
+    trimmed_title
 }
 
 async fn move_file_without_overwrite(previous_path: &Path, next_path: &Path) -> anyhow::Result<()> {
@@ -473,6 +488,13 @@ mod tests {
             .expect("heading should be found");
 
         assert_eq!(title, "Project plan");
+    }
+
+    #[test]
+    fn keeps_hash_characters_that_are_part_of_the_heading_title() {
+        let title = find_first_markdown_heading("# C#").expect("heading should be found");
+
+        assert_eq!(title, "C#");
     }
 
     #[test]
