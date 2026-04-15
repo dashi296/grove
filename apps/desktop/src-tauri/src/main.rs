@@ -141,10 +141,10 @@ fn validate_markdown_path(path: &str) -> Result<(), CommandError> {
         }
     }
 
-    if markdown_path
+    if !markdown_path
         .extension()
         .and_then(|extension| extension.to_str())
-        != Some("md")
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
     {
         return Err(CommandError::new(
             "invalid_markdown_path",
@@ -213,6 +213,11 @@ mod tests {
     #[test]
     fn accepts_workspace_relative_markdown_paths() {
         assert!(validate_markdown_path("Projects/Grove/Plan.md").is_ok());
+    }
+
+    #[test]
+    fn accepts_markdown_paths_with_uppercase_extensions() {
+        assert!(validate_markdown_path("Projects/Grove/Plan.MD").is_ok());
     }
 
     #[test]
