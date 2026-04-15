@@ -58,6 +58,7 @@ plugins/* ──────> PluginHostServices
 - `packages/sync`: [packages/sync/README.md](../packages/sync/README.md)
 - `packages/editor`: [packages/editor/README.md](../packages/editor/README.md)
 - `plugins`: [plugins/README.md](../plugins/README.md)
+- Note app MVP: [docs/note-app-mvp-plan.md](./note-app-mvp-plan.md)
 
 ## 注意点
 
