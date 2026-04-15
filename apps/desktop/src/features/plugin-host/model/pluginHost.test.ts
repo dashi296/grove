@@ -220,6 +220,27 @@ describe("plugin host lifecycle", () => {
 });
 
 describe("validatePluginProvides", () => {
+  it("rejects non-object and unsupported capability registrations", () => {
+    expect(validatePluginProvides(syncManifest, null)).toStrictEqual([
+      {
+        field: "capabilities",
+        message: "Plugin registrations must be an object.",
+      },
+    ]);
+
+    expect(
+      validatePluginProvides(syncManifest, {
+        ...syncProvider,
+        filesystemProvider: {},
+      }),
+    ).toStrictEqual([
+      {
+        field: "capabilities",
+        message: "Unsupported registered capability: filesystemProvider.",
+      },
+    ]);
+  });
+
   it("rejects missing and undeclared capability registrations", () => {
     expect(validatePluginProvides(syncManifest, {})).toStrictEqual([
       {
@@ -307,6 +328,31 @@ describe("activatePluginHostRecord", () => {
         {
           field: "capabilities",
           message: "Declared capability was not registered: syncProvider.",
+        },
+      ],
+    });
+  });
+
+  it("rejects non-object activation results as host errors", async () => {
+    const enabled = enablePluginHostRecord(
+      verifyPluginHostRecord(createDiscoveredPluginHostRecord("sync-r2"), syncManifest),
+    );
+    const plugin: GrovePlugin = {
+      id: "sync-r2",
+      name: "Cloudflare R2 Sync",
+      activate: async () => null as unknown as PluginProvides,
+    };
+
+    const result = await activatePluginHostRecord(enabled, plugin, services);
+
+    expect(result.ok).toBe(false);
+    expect(result.record).toMatchObject({
+      state: "error",
+      errorMessage: "Plugin registrations do not match manifest.",
+      issues: [
+        {
+          field: "capabilities",
+          message: "Plugin registrations must be an object.",
         },
       ],
     });

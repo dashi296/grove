@@ -322,9 +322,27 @@ export function disablePluginHostRecord(record: PluginHostRecord): PluginHostRec
 
 export function validatePluginProvides(
   manifest: PluginManifest,
-  provides: PluginProvides,
+  provides: unknown,
 ): readonly PluginHostValidationIssue[] {
   const issues: PluginHostValidationIssue[] = [];
+
+  if (!isRecord(provides)) {
+    return [
+      {
+        field: "capabilities",
+        message: "Plugin registrations must be an object.",
+      },
+    ];
+  }
+
+  for (const capability of Object.keys(provides)) {
+    if (!isPluginCapability(capability)) {
+      issues.push({
+        field: "capabilities",
+        message: `Unsupported registered capability: ${capability}.`,
+      });
+    }
+  }
 
   for (const capability of supportedCapabilities) {
     const isDeclared = manifest.capabilities.includes(capability);
