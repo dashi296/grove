@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { moveMarkdownFile, refreshNoteIndexes } from "../../../shared";
 import {
+  clearCompletedPathChangeOperations,
   createPathChangeOperation,
   getFailedOperationSteps,
   getNextPendingOperationStep,
@@ -93,6 +94,7 @@ type RenameFolderControlProps = {
 type PathChangeQueueProps = {
   operations: readonly FolderWorkspacePathChangeOperation[];
   runningOperationIds: readonly string[];
+  onClearCompletedOperations: () => void;
   onRunNextStep: (operationId: string) => void;
   onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
 };
@@ -481,13 +483,26 @@ function ActivePane({
 function PathChangeQueue({
   operations,
   runningOperationIds,
+  onClearCompletedOperations,
   onRunNextStep,
   onRetryStep,
 }: PathChangeQueueProps) {
+  const completedOperationCount = operations.filter(isPathChangeOperationComplete).length;
+
   return (
     <section className="folder-navigation__queue" aria-label="Pending path changes">
       <p className="folder-navigation__eyebrow">Local operations</p>
-      <h2 className="folder-navigation__heading">Path change queue</h2>
+      <div className="folder-navigation__queue-heading">
+        <h2 className="folder-navigation__heading">Path change queue</h2>
+        <button
+          type="button"
+          className="folder-navigation__secondary-action"
+          onClick={onClearCompletedOperations}
+          disabled={completedOperationCount === 0}
+        >
+          Clear completed
+        </button>
+      </div>
       {operations.length > 0 ? (
         <ol className="folder-navigation__operations">
           {operations.map((operation) => {
@@ -649,6 +664,10 @@ export function FolderNavigationWorkspace() {
     );
   }
 
+  function clearCompletedPathChanges(): void {
+    setPathChangeOperations(clearCompletedPathChangeOperations);
+  }
+
   async function runNextPathChangeStep(operationId: string): Promise<void> {
     const operation = pathChangeOperations.find((currentOperation) => {
       return currentOperation.id === operationId;
@@ -743,6 +762,7 @@ export function FolderNavigationWorkspace() {
       <PathChangeQueue
         operations={pathChangeOperations}
         runningOperationIds={runningOperationIds}
+        onClearCompletedOperations={clearCompletedPathChanges}
         onRunNextStep={(operationId) => {
           void runNextPathChangeStep(operationId);
         }}

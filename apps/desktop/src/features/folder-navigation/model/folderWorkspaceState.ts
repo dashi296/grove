@@ -215,6 +215,12 @@ export function isPathChangeOperationComplete(
   return operation.steps.every((step) => step.status === "completed");
 }
 
+export function clearCompletedPathChangeOperations(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+): FolderWorkspacePathChangeOperation[] {
+  return operations.filter((operation) => !isPathChangeOperationComplete(operation));
+}
+
 export function getNextRunnablePathChangeOperationId(
   operations: readonly FolderWorkspacePathChangeOperation[],
   runningOperationIds: readonly string[],
