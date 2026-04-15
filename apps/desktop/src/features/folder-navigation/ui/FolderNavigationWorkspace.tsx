@@ -15,6 +15,7 @@ import {
   createPathChangeOperation,
   getFailedOperationSteps,
   getNextPendingOperationStep,
+  getNextRunnablePathChangeOperationId,
   isDescendantFolderPath,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
@@ -451,7 +452,7 @@ function ActivePane({
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
-    "Path changes refresh the folder tree and note list immediately. Local file work is simulated.",
+    "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
   );
 
   return (
@@ -708,6 +709,19 @@ export function FolderNavigationWorkspace() {
     queuePathChangeOperation(mutation);
     return mutation;
   }
+
+  useEffect(() => {
+    const nextRunnableOperationId = getNextRunnablePathChangeOperationId(
+      pathChangeOperations,
+      runningOperationIds,
+    );
+
+    if (nextRunnableOperationId === null) {
+      return;
+    }
+
+    void runNextPathChangeStep(nextRunnableOperationId);
+  }, [pathChangeOperations, runNextPathChangeStep, runningOperationIds]);
 
   return (
     <section className="folder-navigation">
