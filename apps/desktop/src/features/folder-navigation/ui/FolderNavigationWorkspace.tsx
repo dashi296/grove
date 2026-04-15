@@ -11,7 +11,12 @@ import {
 import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { moveMarkdownFile, refreshNoteIndexes, scanMarkdownWorkspace } from "../../../shared";
+import {
+  moveMarkdownFile,
+  readMarkdownNote,
+  refreshNoteIndexes,
+  scanMarkdownWorkspace,
+} from "../../../shared";
 import {
   clearCompletedPathChangeOperations,
   createPathChangeOperation,
@@ -27,6 +32,12 @@ import {
   runNextOperationStep,
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
+import {
+  createCleanNoteEditBuffer,
+  createErroredNoteEditBuffer,
+  discardNoteEditDraft,
+  updateNoteEditDraft,
+} from "../model/noteEditBuffer";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
 import type {
   FolderNavigationNote,
@@ -37,6 +48,7 @@ import type {
   FolderWorkspacePathChangeOperation,
   FolderWorkspaceState,
 } from "../model/folderWorkspaceState";
+import type { NoteEditBuffer } from "../model/noteEditBuffer";
 import "./FolderNavigationWorkspace.css";
 
 type NoteListItem = FolderNavigationNote;
@@ -76,8 +88,13 @@ type ActivePaneProps = {
   folderOptions: readonly FolderOption[];
   selectedFolderPath: FolderScope;
   selectedNoteId: string;
+  noteEditBuffer: NoteEditBuffer | null;
+  editorLoadState: NoteEditorLoadState;
+  editorNotice: string | null;
   onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
+  onEditContent: (content: string) => void;
+  onDiscardDraft: () => void;
 };
 
 type MoveNoteControlProps = {
@@ -104,6 +121,19 @@ type PathChangeQueueProps = {
 type WorkspaceScanState = {
   status: "loading" | "ready" | "failed";
   errorMessage: string | null;
+};
+
+type NoteEditorLoadState = {
+  status: "idle" | "loading";
+};
+
+type NoteEditorProps = {
+  selectedNote: NoteListItem | undefined;
+  noteEditBuffer: NoteEditBuffer | null;
+  editorLoadState: NoteEditorLoadState;
+  editorNotice: string | null;
+  onEditContent: (content: string) => void;
+  onDiscardDraft: () => void;
 };
 
 const initialWorkspaceState: FolderWorkspaceState = {
@@ -191,6 +221,10 @@ function getExpandedFolderPathsForNotes(notes: readonly NoteListItem[]): string[
 
 function getScanErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown workspace scan failed.";
+}
+
+function getNoteReadErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The Markdown note could not be read.";
 }
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
@@ -480,13 +514,72 @@ function RenameFolderControl({
   );
 }
 
+function NoteEditor({
+  selectedNote,
+  noteEditBuffer,
+  editorLoadState,
+  editorNotice,
+  onEditContent,
+  onDiscardDraft,
+}: NoteEditorProps) {
+  if (selectedNote === undefined) {
+    return <p>Select a note to edit its Markdown content.</p>;
+  }
+
+  if (editorLoadState.status === "loading") {
+    return <p className="folder-navigation__muted">Loading Markdown content...</p>;
+  }
+
+  if (noteEditBuffer === null || noteEditBuffer.noteId !== selectedNote.id) {
+    return <p className="folder-navigation__muted">Markdown content is not loaded.</p>;
+  }
+
+  return (
+    <div className="folder-navigation__editor-stack">
+      <div className="folder-navigation__editor-toolbar">
+        <span
+          className={`folder-navigation__status folder-navigation__status--${noteEditBuffer.status}`}
+        >
+          {noteEditBuffer.status}
+        </span>
+        <button
+          type="button"
+          className="folder-navigation__secondary-action"
+          onClick={onDiscardDraft}
+          disabled={noteEditBuffer.status !== "dirty"}
+        >
+          Discard draft
+        </button>
+      </div>
+      {noteEditBuffer.errorMessage === null ? null : (
+        <p className="folder-navigation__step-error">{noteEditBuffer.errorMessage}</p>
+      )}
+      {editorNotice === null ? null : (
+        <p className="folder-navigation__step-error">{editorNotice}</p>
+      )}
+      <textarea
+        className="folder-navigation__textarea"
+        value={noteEditBuffer.draftContent}
+        onChange={(event) => onEditContent(event.target.value)}
+        disabled={noteEditBuffer.status === "error"}
+        aria-label={`Markdown content for ${selectedNote.title}`}
+      />
+    </div>
+  );
+}
+
 function ActivePane({
   notes,
   folderOptions,
   selectedFolderPath,
   selectedNoteId,
+  noteEditBuffer,
+  editorLoadState,
+  editorNotice,
   onMoveSelectedNote,
   onRenameSelectedFolder,
+  onEditContent,
+  onDiscardDraft,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
@@ -503,6 +596,14 @@ function ActivePane({
         ) : (
           <>
             <p>Path: {selectedNote.path}</p>
+            <NoteEditor
+              selectedNote={selectedNote}
+              noteEditBuffer={noteEditBuffer}
+              editorLoadState={editorLoadState}
+              editorNotice={editorNotice}
+              onEditContent={onEditContent}
+              onDiscardDraft={onDiscardDraft}
+            />
             <MoveNoteControl
               folderOptions={folderOptions}
               selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
@@ -631,6 +732,9 @@ function PathChangeQueue({
 export function FolderNavigationWorkspace() {
   const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>(initialWorkspaceState);
   const [selectedNoteId, setSelectedNoteId] = useState<string>("");
+  const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
+  const [editorLoadState, setEditorLoadState] = useState<NoteEditorLoadState>({ status: "idle" });
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [scanState, setScanState] = useState<WorkspaceScanState>({
     status: "loading",
     errorMessage: null,
@@ -655,6 +759,9 @@ export function FolderNavigationWorkspace() {
   const scopedNotes = useMemo(() => {
     return filterNotesByFolderScope(notes, selectedFolderPath);
   }, [notes, selectedFolderPath]);
+  const selectedNote = useMemo(() => {
+    return notes.find((note) => note.id === selectedNoteId) ?? notes[0];
+  }, [notes, selectedNoteId]);
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
     setWorkspaceState(reconcileFolderWorkspaceState(nextState));
@@ -683,6 +790,20 @@ export function FolderNavigationWorkspace() {
       ...currentState,
       selectedFolderPath: path,
     }));
+  }
+
+  function selectNote(noteId: string): void {
+    if (
+      noteEditBuffer?.status === "dirty" &&
+      noteEditBuffer.noteId !== noteId &&
+      selectedNoteId !== noteId
+    ) {
+      setEditorNotice("Discard the current draft before opening another note.");
+      return;
+    }
+
+    setEditorNotice(null);
+    setSelectedNoteId(noteId);
   }
 
   function queuePathChangeOperation(mutation: FolderWorkspaceMutation): void {
@@ -763,6 +884,28 @@ export function FolderNavigationWorkspace() {
     return mutation;
   }
 
+  function editSelectedNoteContent(content: string): void {
+    setNoteEditBuffer((currentBuffer) => {
+      if (currentBuffer === null) {
+        return currentBuffer;
+      }
+
+      return updateNoteEditDraft(currentBuffer, content);
+    });
+    setEditorNotice(null);
+  }
+
+  function discardSelectedDraft(): void {
+    setNoteEditBuffer((currentBuffer) => {
+      if (currentBuffer === null || currentBuffer.status !== "dirty") {
+        return currentBuffer;
+      }
+
+      return discardNoteEditDraft(currentBuffer);
+    });
+    setEditorNotice(null);
+  }
+
   useEffect(() => {
     let canceled = false;
 
@@ -806,6 +949,74 @@ export function FolderNavigationWorkspace() {
   }, []);
 
   useEffect(() => {
+    if (selectedNote === undefined) {
+      setNoteEditBuffer(null);
+      setEditorLoadState({ status: "idle" });
+      setEditorNotice(null);
+      return;
+    }
+
+    if (noteEditBuffer?.noteId === selectedNote.id && noteEditBuffer.status === "dirty") {
+      if (noteEditBuffer.path !== selectedNote.path) {
+        setNoteEditBuffer({
+          ...noteEditBuffer,
+          path: selectedNote.path,
+        });
+      }
+      setEditorLoadState({ status: "idle" });
+      return;
+    }
+
+    if (
+      noteEditBuffer?.noteId === selectedNote.id &&
+      noteEditBuffer.path === selectedNote.path &&
+      noteEditBuffer.status === "clean"
+    ) {
+      return;
+    }
+
+    let canceled = false;
+
+    async function loadSelectedNote(): Promise<void> {
+      setEditorLoadState({ status: "loading" });
+      setEditorNotice(null);
+      setNoteEditBuffer(null);
+
+      try {
+        const content = await readMarkdownNote({ path: selectedNote.path });
+
+        if (canceled) {
+          return;
+        }
+
+        setNoteEditBuffer(createCleanNoteEditBuffer(selectedNote.id, selectedNote.path, content));
+      } catch (error) {
+        if (canceled) {
+          return;
+        }
+
+        setNoteEditBuffer(
+          createErroredNoteEditBuffer(
+            selectedNote.id,
+            selectedNote.path,
+            getNoteReadErrorMessage(error),
+          ),
+        );
+      } finally {
+        if (!canceled) {
+          setEditorLoadState({ status: "idle" });
+        }
+      }
+    }
+
+    void loadSelectedNote();
+
+    return () => {
+      canceled = true;
+    };
+  }, [selectedNote?.id, selectedNote?.path]);
+
+  useEffect(() => {
     const nextRunnableOperationId = getNextRunnablePathChangeOperationId(
       pathChangeOperations,
       runningOperationIds,
@@ -833,15 +1044,20 @@ export function FolderNavigationWorkspace() {
         scopedNotes={scopedNotes}
         selectedNoteId={selectedNoteId}
         scanState={scanState}
-        onSelectNote={setSelectedNoteId}
+        onSelectNote={selectNote}
       />
       <ActivePane
         notes={notes}
         folderOptions={folderOptions}
         selectedFolderPath={selectedFolderPath}
         selectedNoteId={selectedNoteId}
+        noteEditBuffer={noteEditBuffer}
+        editorLoadState={editorLoadState}
+        editorNotice={editorNotice}
         onMoveSelectedNote={moveSelectedNote}
         onRenameSelectedFolder={renameSelectedFolder}
+        onEditContent={editSelectedNoteContent}
+        onDiscardDraft={discardSelectedDraft}
       />
       <PathChangeQueue
         operations={pathChangeOperations}

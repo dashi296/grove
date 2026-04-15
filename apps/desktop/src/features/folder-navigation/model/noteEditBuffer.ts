@@ -1,0 +1,79 @@
+import type { NoteFilePath } from "@grove/core";
+
+export type NoteEditBufferStatus = "clean" | "dirty" | "saving" | "error";
+
+export type NoteEditBuffer = {
+  noteId: string;
+  path: NoteFilePath;
+  baseContent: string;
+  draftContent: string;
+  status: NoteEditBufferStatus;
+  errorMessage: string | null;
+};
+
+export function createCleanNoteEditBuffer(
+  noteId: string,
+  path: NoteFilePath,
+  content: string,
+): NoteEditBuffer {
+  return {
+    noteId,
+    path,
+    baseContent: content,
+    draftContent: content,
+    status: "clean",
+    errorMessage: null,
+  };
+}
+
+export function createErroredNoteEditBuffer(
+  noteId: string,
+  path: NoteFilePath,
+  errorMessage: string,
+): NoteEditBuffer {
+  return {
+    noteId,
+    path,
+    baseContent: "",
+    draftContent: "",
+    status: "error",
+    errorMessage,
+  };
+}
+
+export function updateNoteEditDraft(buffer: NoteEditBuffer, draftContent: string): NoteEditBuffer {
+  return {
+    ...buffer,
+    draftContent,
+    status: draftContent === buffer.baseContent ? "clean" : "dirty",
+    errorMessage: null,
+  };
+}
+
+export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer {
+  return {
+    ...buffer,
+    status: "saving",
+    errorMessage: null,
+  };
+}
+
+export function markNoteEditBufferError(
+  buffer: NoteEditBuffer,
+  errorMessage: string,
+): NoteEditBuffer {
+  return {
+    ...buffer,
+    status: "error",
+    errorMessage,
+  };
+}
+
+export function discardNoteEditDraft(buffer: NoteEditBuffer): NoteEditBuffer {
+  return {
+    ...buffer,
+    draftContent: buffer.baseContent,
+    status: "clean",
+    errorMessage: null,
+  };
+}
