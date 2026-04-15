@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +37,14 @@ struct IndexRefreshSidecarEntry {
     note_ids: Vec<String>,
     reason: IndexRefreshReason,
     queued_at_unix_ms: u128,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScannedMarkdownNote {
+    path: String,
+    title: String,
+    updated_at_unix_ms: u128,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,11 +105,27 @@ async fn refresh_note_indexes(
         .map_err(|error| CommandError::new("index_refresh_failed", error.to_string()))
 }
 
+#[tauri::command]
+async fn scan_markdown_workspace(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<ScannedMarkdownNote>, CommandError> {
+    let workspace_root = default_workspace_root(&app_handle)?;
+
+    tokio::fs::create_dir_all(&workspace_root)
+        .await
+        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
+
+    scan_markdown_files(&workspace_root)
+        .await
+        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))
+}
+
 fn main() {
     if let Err(error) = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             move_markdown_file,
-            refresh_note_indexes
+            refresh_note_indexes,
+            scan_markdown_workspace
         ])
         .run(tauri::generate_context!())
     {
@@ -175,6 +199,124 @@ fn has_windows_drive_prefix(path: &str) -> bool {
     path_bytes.len() >= 2 && path_bytes[0].is_ascii_alphabetic() && path_bytes[1] == b':'
 }
 
+async fn scan_markdown_files(workspace_root: &Path) -> anyhow::Result<Vec<ScannedMarkdownNote>> {
+    let mut pending_dirs = vec![workspace_root.to_path_buf()];
+    let mut notes = Vec::new();
+
+    while let Some(directory) = pending_dirs.pop() {
+        let mut entries = tokio::fs::read_dir(&directory).await?;
+
+        while let Some(entry) = entries.next_entry().await? {
+            let file_type = entry.file_type().await?;
+            let path = entry.path();
+
+            if file_type.is_dir() {
+                pending_dirs.push(path);
+                continue;
+            }
+
+            if !file_type.is_file() || !is_markdown_path(&path) {
+                continue;
+            }
+
+            let relative_path = get_workspace_relative_markdown_path(workspace_root, &path)?;
+            let metadata = entry.metadata().await?;
+            let updated_at_unix_ms = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis();
+            let title = read_note_title(&path).await?;
+
+            notes.push(ScannedMarkdownNote {
+                path: relative_path,
+                title,
+                updated_at_unix_ms,
+            });
+        }
+    }
+
+    notes.sort_by(|left, right| left.path.to_lowercase().cmp(&right.path.to_lowercase()));
+    Ok(notes)
+}
+
+fn get_workspace_relative_markdown_path(
+    workspace_root: &Path,
+    markdown_path: &Path,
+) -> anyhow::Result<String> {
+    let relative_path = markdown_path.strip_prefix(workspace_root)?;
+    let path = relative_path_to_workspace_path(relative_path)?;
+
+    validate_markdown_path(&path)
+        .map_err(|error| anyhow::anyhow!("{}: {}", error.code, error.message))?;
+
+    Ok(path)
+}
+
+fn relative_path_to_workspace_path(relative_path: &Path) -> anyhow::Result<String> {
+    let mut segments = Vec::new();
+
+    for component in relative_path.components() {
+        match component {
+            Component::Normal(segment) => segments.push(segment.to_string_lossy().into_owned()),
+            _ => anyhow::bail!("Markdown scan results must stay inside the workspace."),
+        }
+    }
+
+    if segments.is_empty() {
+        anyhow::bail!("Markdown scan results must include a file name.");
+    }
+
+    Ok(segments.join("/"))
+}
+
+fn is_markdown_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+}
+
+async fn read_note_title(path: &Path) -> anyhow::Result<String> {
+    let fallback_title = path
+        .file_stem()
+        .and_then(|file_stem| file_stem.to_str())
+        .unwrap_or("Untitled")
+        .trim()
+        .to_string();
+
+    let mut file = tokio::fs::File::open(path).await?;
+    let mut content = String::new();
+    file.read_to_string(&mut content).await?;
+
+    Ok(find_first_markdown_heading(&content).unwrap_or(fallback_title))
+}
+
+fn find_first_markdown_heading(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed_line = line.trim_start();
+        let heading_marker_len = trimmed_line
+            .chars()
+            .take_while(|character| *character == '#')
+            .count();
+
+        if heading_marker_len == 0 || heading_marker_len > 6 {
+            continue;
+        }
+
+        let heading_body = &trimmed_line[heading_marker_len..];
+
+        if !heading_body.starts_with(char::is_whitespace) {
+            continue;
+        }
+
+        let title = heading_body.trim().trim_end_matches('#').trim();
+
+        if title.is_empty() {
+            continue;
+        }
+
+        return Some(title.to_string());
+    }
+
+    None
+}
+
 async fn move_file_without_overwrite(previous_path: &Path, next_path: &Path) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(previous_path).await? {
         if tokio::fs::try_exists(next_path).await? {
@@ -237,7 +379,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{move_file_without_overwrite, validate_markdown_path};
+    use super::{
+        find_first_markdown_heading, get_workspace_relative_markdown_path,
+        move_file_without_overwrite, scan_markdown_files, validate_markdown_path,
+    };
 
     fn run_async<F>(future: F) -> F::Output
     where
@@ -298,6 +443,61 @@ mod tests {
         let error = validate_markdown_path("Projects/Grove/Plan.txt").unwrap_err();
 
         assert_eq!(error.code, "invalid_markdown_path");
+    }
+
+    #[test]
+    fn derives_workspace_relative_markdown_paths() {
+        let workspace_dir = PathBuf::from("/workspace");
+        let markdown_path = workspace_dir.join("Projects").join("Grove").join("Plan.md");
+
+        let path = get_workspace_relative_markdown_path(&workspace_dir, &markdown_path)
+            .expect("relative Markdown path should be derived");
+
+        assert_eq!(path, "Projects/Grove/Plan.md");
+    }
+
+    #[test]
+    fn rejects_scan_paths_outside_the_workspace() {
+        let workspace_dir = PathBuf::from("/workspace");
+        let markdown_path = PathBuf::from("/other").join("Plan.md");
+
+        let error = get_workspace_relative_markdown_path(&workspace_dir, &markdown_path)
+            .expect_err("outside paths should be rejected");
+
+        assert!(error.to_string().contains("prefix"));
+    }
+
+    #[test]
+    fn reads_first_markdown_heading_as_title() {
+        let title = find_first_markdown_heading("#tag\n\n## Project plan ##\nbody")
+            .expect("heading should be found");
+
+        assert_eq!(title, "Project plan");
+    }
+
+    #[test]
+    fn scans_markdown_files_and_ignores_other_files() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("scans-markdown-files");
+            let plan_path = workspace_dir.join("Projects").join("Plan.md");
+            let notes_path = workspace_dir.join("Inbox.MD");
+            let text_path = workspace_dir.join("Projects").join("Draft.txt");
+            tokio::fs::create_dir_all(plan_path.parent().expect("plan parent")).await?;
+            tokio::fs::write(&plan_path, "# Plan\nbody").await?;
+            tokio::fs::write(&notes_path, "no heading").await?;
+            tokio::fs::write(&text_path, "# Draft").await?;
+
+            let notes = scan_markdown_files(&workspace_dir).await?;
+
+            assert_eq!(notes.len(), 2);
+            assert_eq!(notes[0].path, "Inbox.MD");
+            assert_eq!(notes[0].title, "Inbox");
+            assert_eq!(notes[1].path, "Projects/Plan.md");
+            assert_eq!(notes[1].title, "Plan");
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace scan should succeed");
     }
 
     #[test]
