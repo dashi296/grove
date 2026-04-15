@@ -1,4 +1,3 @@
-export { FolderNavigationWorkspace } from "./folder-navigation";
 export {
   activatePluginHostRecord,
   createDiscoveredPluginHostRecord,
@@ -9,11 +8,11 @@ export {
   validatePluginManifest,
   validatePluginProvides,
   verifyPluginHostRecord,
-} from "./plugin-host";
+} from "./model/pluginHost";
 export type {
   PluginHostActivationResult,
   PluginHostLifecycleState,
   PluginHostRecord,
   PluginHostValidationIssue,
   PluginHostValidationResult,
-} from "./plugin-host";
+} from "./model/pluginHost";
