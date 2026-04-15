@@ -117,6 +117,32 @@ describe("validatePluginManifest", () => {
       ]),
     );
   });
+
+  it("rejects absolute and URL entry paths", () => {
+    const entries = [
+      "/tmp/plugin.js",
+      "\\\\server\\plugin.js",
+      "C:\\plugin.js",
+      "https://example.com/plugin.js",
+    ];
+
+    for (const entry of entries) {
+      const result = validatePluginManifest({
+        ...syncManifest,
+        entry,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            field: "entry",
+            message: "entry must stay inside the plugin package.",
+          },
+        ],
+      });
+    }
+  });
 });
 
 describe("plugin host lifecycle", () => {
@@ -161,6 +187,25 @@ describe("plugin host lifecycle", () => {
     );
   });
 
+  it("rejects manifests that do not match the discovered plugin id", () => {
+    const record = verifyPluginHostRecord(createDiscoveredPluginHostRecord("sync-r2"), {
+      ...syncManifest,
+      id: "other-plugin",
+    });
+
+    expect(record).toStrictEqual({
+      id: "sync-r2",
+      state: "error",
+      errorMessage: "Plugin manifest id does not match discovered plugin id.",
+      issues: [
+        {
+          field: "id",
+          message: "id must match the discovered plugin id.",
+        },
+      ],
+    });
+  });
+
   it("returns enabled or active records to verified when disabled", () => {
     const enabled = enablePluginHostRecord(
       verifyPluginHostRecord(createDiscoveredPluginHostRecord("sync-r2"), syncManifest),
@@ -195,6 +240,23 @@ describe("validatePluginProvides", () => {
       {
         field: "capabilities",
         message: "Registered capability was not declared: syncProvider.",
+      },
+    ]);
+  });
+
+  it("rejects invalid capability registrations", () => {
+    const invalidProvides = {
+      syncProvider: {
+        id: "r2",
+        name: "Cloudflare R2",
+        upload: async () => undefined,
+      },
+    } as unknown as PluginProvides;
+
+    expect(validatePluginProvides(syncManifest, invalidProvides)).toStrictEqual([
+      {
+        field: "capabilities",
+        message: "Registered capability is invalid: syncProvider.",
       },
     ]);
   });

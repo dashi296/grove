@@ -124,7 +124,12 @@ function validateEntry(input: Record<string, unknown>, issues: PluginHostValidat
     return;
   }
 
-  if (entry.startsWith("/") || entry.includes("..")) {
+  if (
+    entry.startsWith("/") ||
+    entry.startsWith("\\") ||
+    entry.includes("..") ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(entry)
+  ) {
     issues.push({
       field: "entry",
       message: "entry must stay inside the plugin package.",
@@ -269,6 +274,20 @@ export function verifyPluginHostRecord(
     };
   }
 
+  if (validation.manifest.id !== record.id) {
+    return {
+      id: record.id,
+      state: "error",
+      errorMessage: "Plugin manifest id does not match discovered plugin id.",
+      issues: [
+        {
+          field: "id",
+          message: "id must match the discovered plugin id.",
+        },
+      ],
+    };
+  }
+
   return {
     id: validation.manifest.id,
     state: "verified",
@@ -324,9 +343,38 @@ export function validatePluginProvides(
         message: `Registered capability was not declared: ${capability}.`,
       });
     }
+
+    if (isRegistered && !isValidCapabilityRegistration(capability, provides[capability])) {
+      issues.push({
+        field: "capabilities",
+        message: `Registered capability is invalid: ${capability}.`,
+      });
+    }
   }
 
   return issues;
+}
+
+function hasFunction(value: Record<string, unknown>, field: string): boolean {
+  return typeof value[field] === "function";
+}
+
+function isValidCapabilityRegistration(capability: PluginCapability, value: unknown): boolean {
+  if (!isRecord(value) || !isNonEmptyString(value.id) || !isNonEmptyString(value.name)) {
+    return false;
+  }
+
+  if (capability === "syncProvider") {
+    return (
+      hasFunction(value, "upload") &&
+      hasFunction(value, "download") &&
+      hasFunction(value, "list") &&
+      hasFunction(value, "delete") &&
+      hasFunction(value, "isAvailable")
+    );
+  }
+
+  return hasFunction(value, "isAvailable") && hasFunction(value, "generate");
 }
 
 function assertPermission(manifest: PluginManifest, permission: PluginPermission): void {
