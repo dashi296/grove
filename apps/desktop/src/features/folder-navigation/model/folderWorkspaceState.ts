@@ -131,6 +131,37 @@ function createWorkspaceMutation(
   };
 }
 
+function assertPathChangesDoNotConflict(
+  notes: readonly FolderNavigationNote[],
+  pathChanges: readonly FolderWorkspacePathChange[],
+): void {
+  if (pathChanges.length === 0) {
+    return;
+  }
+
+  const pathChangesByNoteId = new Map<string, FolderWorkspacePathChange>();
+  const finalPathOwners = new Map<NoteFilePath, string[]>();
+
+  for (const pathChange of pathChanges) {
+    pathChangesByNoteId.set(pathChange.noteId, pathChange);
+  }
+
+  for (const note of notes) {
+    const finalPath = pathChangesByNoteId.get(note.id)?.nextPath ?? note.path;
+    const ownerIds = finalPathOwners.get(finalPath) ?? [];
+
+    finalPathOwners.set(finalPath, [...ownerIds, note.id]);
+  }
+
+  for (const pathChange of pathChanges) {
+    const ownerIds = finalPathOwners.get(pathChange.nextPath) ?? [];
+
+    if (ownerIds.some((ownerId) => ownerId !== pathChange.noteId)) {
+      throw new Error("A note already uses the target Markdown path.");
+    }
+  }
+}
+
 export function createPathChangeOperation(
   id: string,
   mutation: FolderWorkspaceMutation,
@@ -288,6 +319,7 @@ export function moveNoteInFolderWorkspace(
 
     return { ...note, path: nextPath };
   });
+  assertPathChangesDoNotConflict(state.notes, pathChanges);
 
   return createWorkspaceMutation(
     {
@@ -330,6 +362,8 @@ export function renameFolderInWorkspace(
 
     return { ...note, path: nextPath };
   });
+  assertPathChangesDoNotConflict(state.notes, pathChanges);
+
   const explicitFolders = dedupeAndSortFolderPaths(
     state.explicitFolders.flatMap((folderPath) => {
       const nextPath = replaceFolderPrefix(folderPath, sourceFolderPath, targetFolderPath);

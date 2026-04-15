@@ -85,6 +85,27 @@ describe("moveNoteInFolderWorkspace", () => {
     ]);
     expect(result.state.selectedFolderPath).toBe("Projects/Grove/Ideas");
   });
+
+  it("rejects moves that would overwrite an existing note path", () => {
+    expect(() =>
+      moveNoteInFolderWorkspace(
+        {
+          ...workspaceState,
+          notes: [
+            ...workspaceState.notes,
+            {
+              id: "note-reading-plan",
+              title: "Reading Plan",
+              path: normalizeNoteFilePath("Reading/Plan.md"),
+              updatedLabel: "Today",
+            },
+          ],
+        },
+        "note-plan",
+        normalizeFolderPath("Reading"),
+      ),
+    ).toThrow("target Markdown path");
+  });
 });
 
 describe("createPathChangeOperation", () => {
@@ -299,6 +320,47 @@ describe("renameFolderInWorkspace", () => {
     expect(result.state.selectedFolderPath).toBeNull();
   });
 
+  it("allows parent folder renames when notes vacate each other's old paths", () => {
+    const result = renameFolderInWorkspace(
+      {
+        ...workspaceState,
+        notes: [
+          {
+            id: "note-nested-plan",
+            title: "Nested Plan",
+            path: normalizeNoteFilePath("Projects/Grove/Grove/Plan.md"),
+            updatedLabel: "Today",
+          },
+          {
+            id: "note-plan",
+            title: "Plan",
+            path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+            updatedLabel: "Yesterday",
+          },
+        ],
+      },
+      normalizeFolderPath("Projects/Grove"),
+      normalizeFolderPath("Projects"),
+    );
+
+    expect(result.pathChanges).toStrictEqual([
+      {
+        noteId: "note-nested-plan",
+        previousPath: "Projects/Grove/Grove/Plan.md",
+        nextPath: "Projects/Grove/Plan.md",
+      },
+      {
+        noteId: "note-plan",
+        previousPath: "Projects/Grove/Plan.md",
+        nextPath: "Projects/Plan.md",
+      },
+    ]);
+    expect(result.state.notes.map((note) => note.path)).toStrictEqual([
+      "Projects/Grove/Plan.md",
+      "Projects/Plan.md",
+    ]);
+  });
+
   it("rejects moving a folder into its own descendant", () => {
     expect(() =>
       renameFolderInWorkspace(
@@ -307,5 +369,26 @@ describe("renameFolderInWorkspace", () => {
         normalizeFolderPath("Projects/Grove/Research"),
       ),
     ).toThrow("outside the selected folder");
+  });
+
+  it("rejects folder renames that would overwrite an existing note path", () => {
+    expect(() =>
+      renameFolderInWorkspace(
+        {
+          ...workspaceState,
+          notes: [
+            ...workspaceState.notes,
+            {
+              id: "note-area-plan",
+              title: "Area Plan",
+              path: normalizeNoteFilePath("Areas/Grove/Plan.md"),
+              updatedLabel: "Today",
+            },
+          ],
+        },
+        normalizeFolderPath("Projects/Grove"),
+        normalizeFolderPath("Areas/Grove"),
+      ),
+    ).toThrow("target Markdown path");
   });
 });
