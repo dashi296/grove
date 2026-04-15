@@ -8,6 +8,7 @@ import {
   failNextOperationStep,
   getFailedOperationSteps,
   getNextPendingOperationStep,
+  getNextRunnablePathChangeOperationId,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
@@ -153,6 +154,94 @@ describe("createPathChangeOperation", () => {
 });
 
 describe("path change operation steps", () => {
+  it("selects the oldest runnable operation when the queue is idle", () => {
+    const firstMutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const secondMutation = renameFolderInWorkspace(
+      workspaceState,
+      normalizeFolderPath("Projects/Grove"),
+      normalizeFolderPath("Areas/Grove"),
+    );
+    const firstOperation = createPathChangeOperation("operation-1", firstMutation);
+    const secondOperation = createPathChangeOperation("operation-2", secondMutation);
+
+    if (firstOperation === null || secondOperation === null) {
+      throw new Error("Expected path change operations.");
+    }
+
+    expect(getNextRunnablePathChangeOperationId([secondOperation, firstOperation], [])).toBe(
+      "operation-1",
+    );
+  });
+
+  it("waits for running operations and completed or failed queue heads", () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const operation = createPathChangeOperation("operation-1", mutation);
+
+    if (operation === null) {
+      throw new Error("Expected path change operation.");
+    }
+
+    const completeOperation = completeNextOperationStep(
+      completeNextOperationStep([operation], "operation-1"),
+      "operation-1",
+    )[0];
+    const failedOperation = failNextOperationStep(
+      [operation],
+      "operation-1",
+      "File move failed.",
+    )[0];
+
+    if (completeOperation === undefined || failedOperation === undefined) {
+      throw new Error("Expected updated path change operations.");
+    }
+
+    expect(getNextRunnablePathChangeOperationId([operation], ["operation-1"])).toBeNull();
+    expect(
+      getNextRunnablePathChangeOperationId([completeOperation, failedOperation], []),
+    ).toBeNull();
+  });
+
+  it("keeps newer operations blocked while an older operation failed", () => {
+    const firstMutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const secondMutation = renameFolderInWorkspace(
+      workspaceState,
+      normalizeFolderPath("Projects/Grove"),
+      normalizeFolderPath("Areas/Grove"),
+    );
+    const firstOperation = createPathChangeOperation("operation-1", firstMutation);
+    const secondOperation = createPathChangeOperation("operation-2", secondMutation);
+
+    if (firstOperation === null || secondOperation === null) {
+      throw new Error("Expected path change operations.");
+    }
+
+    const failedFirstOperation = failNextOperationStep(
+      [firstOperation],
+      "operation-1",
+      "File move failed.",
+    )[0];
+
+    if (failedFirstOperation === undefined) {
+      throw new Error("Expected failed path change operation.");
+    }
+
+    expect(
+      getNextRunnablePathChangeOperationId([secondOperation, failedFirstOperation], []),
+    ).toBeNull();
+  });
+
   it("completes file moves before index refreshes", () => {
     const mutation = moveNoteInFolderWorkspace(
       workspaceState,

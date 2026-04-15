@@ -215,6 +215,27 @@ export function isPathChangeOperationComplete(
   return operation.steps.every((step) => step.status === "completed");
 }
 
+export function getNextRunnablePathChangeOperationId(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  runningOperationIds: readonly string[],
+): string | null {
+  if (runningOperationIds.length > 0) {
+    return null;
+  }
+
+  for (const operation of [...operations].reverse()) {
+    if (isPathChangeOperationComplete(operation)) {
+      continue;
+    }
+
+    const nextStep = getNextPendingOperationStep(operation);
+
+    return nextStep === null ? null : operation.id;
+  }
+
+  return null;
+}
+
 export function completeNextOperationStep(
   operations: readonly FolderWorkspacePathChangeOperation[],
   operationId: string,
