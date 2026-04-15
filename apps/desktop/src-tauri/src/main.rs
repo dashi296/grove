@@ -177,6 +177,10 @@ fn has_windows_drive_prefix(path: &str) -> bool {
 
 async fn move_file_without_overwrite(previous_path: &Path, next_path: &Path) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(previous_path).await? {
+        if tokio::fs::try_exists(next_path).await? {
+            return Ok(());
+        }
+
         anyhow::bail!(
             "The source Markdown file does not exist: {}",
             previous_path.display()
@@ -228,7 +232,35 @@ async fn append_index_refresh_sidecar_entry(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_markdown_path;
+    use std::{
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::{move_file_without_overwrite, validate_markdown_path};
+
+    fn run_async<F>(future: F) -> F::Output
+    where
+        F: std::future::Future,
+    {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime should build")
+            .block_on(future)
+    }
+
+    fn unique_test_dir(test_name: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+
+        std::env::temp_dir().join(format!(
+            "grove-{test_name}-{}-{timestamp}",
+            std::process::id()
+        ))
+    }
 
     #[test]
     fn accepts_workspace_relative_markdown_paths() {
@@ -266,5 +298,64 @@ mod tests {
         let error = validate_markdown_path("Projects/Grove/Plan.txt").unwrap_err();
 
         assert_eq!(error.code, "invalid_markdown_path");
+    }
+
+    #[test]
+    fn moves_files_without_overwriting_targets() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("moves-files-without-overwriting-targets");
+            let previous_path = workspace_dir.join("Projects").join("Plan.md");
+            let next_path = workspace_dir.join("Reading").join("Plan.md");
+            tokio::fs::create_dir_all(previous_path.parent().expect("source parent")).await?;
+            tokio::fs::write(&previous_path, "plan").await?;
+
+            move_file_without_overwrite(&previous_path, &next_path).await?;
+
+            assert!(!tokio::fs::try_exists(&previous_path).await?);
+            assert_eq!(tokio::fs::read_to_string(&next_path).await?, "plan");
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("file move should succeed");
+    }
+
+    #[test]
+    fn treats_already_moved_files_as_successful_for_retries() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("treats-already-moved-files-as-successful");
+            let previous_path = workspace_dir.join("Projects").join("Plan.md");
+            let next_path = workspace_dir.join("Reading").join("Plan.md");
+            tokio::fs::create_dir_all(next_path.parent().expect("target parent")).await?;
+            tokio::fs::write(&next_path, "plan").await?;
+
+            move_file_without_overwrite(&previous_path, &next_path).await?;
+
+            assert_eq!(tokio::fs::read_to_string(&next_path).await?, "plan");
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("already moved file should be idempotent");
+    }
+
+    #[test]
+    fn rejects_existing_targets_when_source_still_exists() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("rejects-existing-targets");
+            let previous_path = workspace_dir.join("Projects").join("Plan.md");
+            let next_path = workspace_dir.join("Reading").join("Plan.md");
+            tokio::fs::create_dir_all(previous_path.parent().expect("source parent")).await?;
+            tokio::fs::create_dir_all(next_path.parent().expect("target parent")).await?;
+            tokio::fs::write(&previous_path, "source").await?;
+            tokio::fs::write(&next_path, "target").await?;
+
+            let error = move_file_without_overwrite(&previous_path, &next_path)
+                .await
+                .expect_err("existing target should be rejected");
+
+            assert!(error.to_string().contains("already exists"));
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("target collision test should run");
     }
 }
