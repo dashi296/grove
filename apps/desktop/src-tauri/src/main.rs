@@ -369,19 +369,50 @@ fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
     Ok(path.with_file_name(temporary_file_name))
 }
 
+#[cfg(not(windows))]
 async fn replace_file_with_temporary_path(
     temporary_path: &Path,
     path: &Path,
 ) -> anyhow::Result<()> {
-    #[cfg(windows)]
-    {
-        if tokio::fs::try_exists(path).await? {
-            tokio::fs::remove_file(path).await?;
-        }
-    }
-
     tokio::fs::rename(temporary_path, path).await?;
     Ok(())
+}
+
+#[cfg(windows)]
+async fn replace_file_with_temporary_path(
+    temporary_path: &Path,
+    path: &Path,
+) -> anyhow::Result<()> {
+    replace_file_with_backup_on_windows(temporary_path, path).await
+}
+
+#[cfg(windows)]
+async fn replace_file_with_backup_on_windows(
+    temporary_path: &Path,
+    path: &Path,
+) -> anyhow::Result<()> {
+    if !tokio::fs::try_exists(path).await? {
+        tokio::fs::rename(temporary_path, path).await?;
+        return Ok(());
+    }
+
+    if !tokio::fs::metadata(path).await?.is_file() {
+        anyhow::bail!("The target Markdown path is not a file: {}", path.display());
+    }
+
+    let backup_path = get_temporary_write_path(path)?.with_extension("backup");
+    tokio::fs::rename(path, &backup_path).await?;
+
+    match tokio::fs::rename(temporary_path, path).await {
+        Ok(()) => {
+            let _ = tokio::fs::remove_file(&backup_path).await;
+            Ok(())
+        }
+        Err(error) => {
+            let _ = tokio::fs::rename(&backup_path, path).await;
+            Err(error.into())
+        }
+    }
 }
 
 async fn summarize_markdown_file(

@@ -20,18 +20,13 @@ import {
 } from "../../../shared";
 import type { ScannedMarkdownNote } from "../../../shared";
 import {
-  clearCompletedPathChangeOperations,
-  createPathChangeOperation,
   getFailedOperationSteps,
   getNextPendingOperationStep,
-  getNextRunnablePathChangeOperationId,
   isDescendantFolderPath,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
-  retryOperationStep,
-  runNextOperationStep,
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
 import {
@@ -43,6 +38,7 @@ import {
   markNoteEditBufferSaving,
   updateNoteEditDraft,
 } from "../model/noteEditBuffer";
+import { usePathChangeQueue } from "../model/usePathChangeQueue";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
 import type {
   FolderNavigationNote,
@@ -765,13 +761,15 @@ export function FolderNavigationWorkspace() {
     status: "loading",
     errorMessage: null,
   });
-  const [pathChangeOperations, setPathChangeOperations] = useState<
-    readonly FolderWorkspacePathChangeOperation[]
-  >([]);
-  const [runningOperationIds, setRunningOperationIds] = useState<readonly string[]>([]);
-  const runningOperationIdSet = useRef(new Set<string>());
   const savingNoteIdSet = useRef(new Set<string>());
-  const nextOperationNumber = useRef(1);
+  const {
+    pathChangeOperations,
+    runningOperationIds,
+    queuePathChangeOperation,
+    retryPathChangeStep,
+    clearCompletedPathChanges,
+    runNextPathChangeStep,
+  } = usePathChangeQueue(desktopPathChangeExecutor);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
 
   const folderTree = useMemo(() => {
@@ -832,58 +830,6 @@ export function FolderNavigationWorkspace() {
 
     setEditorNotice(null);
     setSelectedNoteId(noteId);
-  }
-
-  function queuePathChangeOperation(mutation: FolderWorkspaceMutation): void {
-    const operation = createPathChangeOperation(
-      `path-change-${nextOperationNumber.current}`,
-      mutation,
-    );
-
-    if (operation === null) {
-      return;
-    }
-
-    nextOperationNumber.current += 1;
-    setPathChangeOperations((currentOperations) => [operation, ...currentOperations]);
-  }
-
-  function retryPathChangeStep(operationId: string, stepId: FolderWorkspaceOperationStepId): void {
-    setPathChangeOperations((currentOperations) =>
-      retryOperationStep(currentOperations, operationId, stepId),
-    );
-  }
-
-  function clearCompletedPathChanges(): void {
-    setPathChangeOperations(clearCompletedPathChangeOperations);
-  }
-
-  async function runNextPathChangeStep(operationId: string): Promise<void> {
-    const operation = pathChangeOperations.find((currentOperation) => {
-      return currentOperation.id === operationId;
-    });
-
-    if (operation === undefined || runningOperationIdSet.current.has(operationId)) {
-      return;
-    }
-
-    runningOperationIdSet.current.add(operationId);
-    setRunningOperationIds((currentOperationIds) => [...currentOperationIds, operationId]);
-
-    try {
-      const nextOperation = await runNextOperationStep(operation, desktopPathChangeExecutor);
-
-      setPathChangeOperations((currentOperations) =>
-        currentOperations.map((currentOperation) => {
-          return currentOperation.id === operationId ? nextOperation : currentOperation;
-        }),
-      );
-    } finally {
-      runningOperationIdSet.current.delete(operationId);
-      setRunningOperationIds((currentOperationIds) =>
-        currentOperationIds.filter((currentOperationId) => currentOperationId !== operationId),
-      );
-    }
   }
 
   function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
@@ -1148,19 +1094,6 @@ export function FolderNavigationWorkspace() {
       window.removeEventListener("keydown", saveOnKeyboardShortcut);
     };
   }, [saveSelectedNoteDraft]);
-
-  useEffect(() => {
-    const nextRunnableOperationId = getNextRunnablePathChangeOperationId(
-      pathChangeOperations,
-      runningOperationIds,
-    );
-
-    if (nextRunnableOperationId === null) {
-      return;
-    }
-
-    void runNextPathChangeStep(nextRunnableOperationId);
-  }, [pathChangeOperations, runNextPathChangeStep, runningOperationIds]);
 
   return (
     <section className="folder-navigation">
