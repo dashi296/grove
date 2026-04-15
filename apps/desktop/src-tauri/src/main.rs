@@ -339,10 +339,26 @@ async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> 
         tokio::fs::create_dir_all(parent_path).await?;
     }
 
-    let mut file = tokio::fs::File::create(path).await?;
+    let temporary_path = get_temporary_write_path(path)?;
+    let mut file = tokio::fs::File::create(&temporary_path).await?;
     file.write_all(content).await?;
     file.flush().await?;
+    file.sync_all().await?;
+    drop(file);
+
+    tokio::fs::rename(&temporary_path, path).await?;
     Ok(())
+}
+
+fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
+    let file_name = path
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .ok_or_else(|| anyhow::anyhow!("Markdown file paths must include a file name."))?;
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let temporary_file_name = format!(".{file_name}.{}.{}.tmp", std::process::id(), timestamp);
+
+    Ok(path.with_file_name(temporary_file_name))
 }
 
 async fn summarize_markdown_file(
@@ -473,9 +489,9 @@ mod tests {
     };
 
     use super::{
-        find_first_markdown_heading, get_workspace_relative_markdown_path,
-        move_file_without_overwrite, read_markdown_file, scan_markdown_files,
-        system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        find_first_markdown_heading, get_temporary_write_path,
+        get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
+        scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -641,6 +657,19 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("Markdown write should succeed");
+    }
+
+    #[test]
+    fn creates_temporary_write_paths_next_to_markdown_files() {
+        let note_path = PathBuf::from("Projects").join("Plan.md");
+        let temporary_path =
+            get_temporary_write_path(&note_path).expect("Temporary path should build");
+
+        assert_eq!(temporary_path.parent(), note_path.parent());
+        assert!(temporary_path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with(".Plan.md.")));
     }
 
     #[test]

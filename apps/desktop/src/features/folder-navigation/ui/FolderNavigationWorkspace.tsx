@@ -237,6 +237,10 @@ function getNoteSaveErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be saved.";
 }
 
+function isDraftBlockingWorkspaceChange(buffer: NoteEditBuffer | null): boolean {
+  return buffer?.status === "dirty" || buffer?.status === "saving";
+}
+
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
   if (scanState.status === "loading") {
     return <p className="folder-navigation__muted">Scanning Markdown files...</p>;
@@ -765,6 +769,7 @@ export function FolderNavigationWorkspace() {
   >([]);
   const [runningOperationIds, setRunningOperationIds] = useState<readonly string[]>([]);
   const runningOperationIdSet = useRef(new Set<string>());
+  const savingNoteIdSet = useRef(new Set<string>());
   const nextOperationNumber = useRef(1);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
 
@@ -815,7 +820,8 @@ export function FolderNavigationWorkspace() {
 
   function selectNote(noteId: string): void {
     if (
-      (noteEditBuffer?.status === "dirty" || noteEditBuffer?.status === "saving") &&
+      noteEditBuffer !== null &&
+      isDraftBlockingWorkspaceChange(noteEditBuffer) &&
       noteEditBuffer.noteId !== noteId &&
       selectedNoteId !== noteId
     ) {
@@ -880,6 +886,10 @@ export function FolderNavigationWorkspace() {
   }
 
   function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
+    if (isDraftBlockingWorkspaceChange(noteEditBuffer)) {
+      throw new Error("Save or discard the current draft before moving notes.");
+    }
+
     const mutation = moveNoteInFolderWorkspace(workspaceState, selectedNoteId, targetFolderPath);
     applyWorkspaceState(mutation.state);
     queuePathChangeOperation(mutation);
@@ -887,6 +897,10 @@ export function FolderNavigationWorkspace() {
   }
 
   function renameSelectedFolder(targetFolderPath: FolderScope): FolderWorkspaceMutation {
+    if (isDraftBlockingWorkspaceChange(noteEditBuffer)) {
+      throw new Error("Save or discard the current draft before renaming folders.");
+    }
+
     if (selectedFolderPath === null) {
       return {
         affectedNoteIds: [],
@@ -919,10 +933,15 @@ export function FolderNavigationWorkspace() {
   const saveSelectedNoteDraft = useCallback(async (): Promise<void> => {
     const buffer = noteEditBuffer;
 
-    if (buffer === null || buffer.status !== "dirty") {
+    if (
+      buffer === null ||
+      buffer.status !== "dirty" ||
+      savingNoteIdSet.current.has(buffer.noteId)
+    ) {
       return;
     }
 
+    savingNoteIdSet.current.add(buffer.noteId);
     setNoteEditBuffer(markNoteEditBufferSaving(buffer));
     setEditorNotice(null);
 
@@ -937,13 +956,26 @@ export function FolderNavigationWorkspace() {
         reconcileFolderWorkspaceState({
           ...currentState,
           notes: currentState.notes.map((note) => {
-            return note.id === buffer.noteId
-              ? { ...note, ...updatedNote, id: buffer.noteId }
-              : note;
+            if (note.id !== buffer.noteId) {
+              return note;
+            }
+
+            return {
+              ...note,
+              ...updatedNote,
+              id: buffer.noteId,
+              path: note.path === buffer.path ? updatedNote.path : note.path,
+            };
           }),
         }),
       );
-      setNoteEditBuffer(markNoteEditBufferSaved(buffer, buffer.draftContent));
+      setNoteEditBuffer((currentBuffer) => {
+        if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
+          return currentBuffer;
+        }
+
+        return markNoteEditBufferSaved(currentBuffer, buffer.draftContent);
+      });
 
       try {
         await refreshNoteIndexes({
@@ -954,7 +986,15 @@ export function FolderNavigationWorkspace() {
         setEditorNotice(`Saved, but index refresh failed: ${getNoteSaveErrorMessage(error)}`);
       }
     } catch (error) {
-      setNoteEditBuffer(markNoteEditBufferSaveFailed(buffer, getNoteSaveErrorMessage(error)));
+      setNoteEditBuffer((currentBuffer) => {
+        if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
+          return currentBuffer;
+        }
+
+        return markNoteEditBufferSaveFailed(currentBuffer, getNoteSaveErrorMessage(error));
+      });
+    } finally {
+      savingNoteIdSet.current.delete(buffer.noteId);
     }
   }, [noteEditBuffer]);
 
