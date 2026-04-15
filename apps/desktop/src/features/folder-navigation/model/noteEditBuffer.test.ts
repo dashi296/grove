@@ -72,6 +72,20 @@ describe("note edit buffer", () => {
     });
   });
 
+  it("keeps newer edits dirty when an earlier save completes", () => {
+    const savingBuffer = markNoteEditBufferSaving(
+      updateNoteEditDraft(createCleanNoteEditBuffer("note-plan", notePath, "# Plan"), "# Saved"),
+    );
+    const editedAgainBuffer = updateNoteEditDraft(savingBuffer, "# Saved\n\nMore");
+
+    expect(markNoteEditBufferSaved(editedAgainBuffer, "# Saved")).toMatchObject({
+      baseContent: "# Saved",
+      draftContent: "# Saved\n\nMore",
+      status: "dirty",
+      errorMessage: null,
+    });
+  });
+
   it("creates an errored buffer for failed note reads", () => {
     const buffer = createErroredNoteEditBuffer(
       "note-plan",

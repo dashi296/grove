@@ -73,11 +73,12 @@ export function markNoteEditBufferSaved(
   buffer: NoteEditBuffer,
   savedContent: string,
 ): NoteEditBuffer {
+  const status = buffer.draftContent === savedContent ? "clean" : "dirty";
+
   return {
     ...buffer,
     baseContent: savedContent,
-    draftContent: savedContent,
-    status: "clean",
+    status,
     errorMessage: null,
   };
 }

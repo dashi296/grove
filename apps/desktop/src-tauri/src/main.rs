@@ -660,6 +660,25 @@ mod tests {
     }
 
     #[test]
+    fn overwrites_existing_markdown_file_content() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("overwrites-existing-markdown-file-content");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+
+            write_markdown_file(&note_path, b"# Plan\n\nDraft").await?;
+            write_markdown_file(&note_path, b"# Plan\n\nSaved").await?;
+
+            assert_eq!(
+                tokio::fs::read_to_string(&note_path).await?,
+                "# Plan\n\nSaved"
+            );
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("Markdown overwrite should succeed");
+    }
+
+    #[test]
     fn creates_temporary_write_paths_next_to_markdown_files() {
         let note_path = PathBuf::from("Projects").join("Plan.md");
         let temporary_path =
