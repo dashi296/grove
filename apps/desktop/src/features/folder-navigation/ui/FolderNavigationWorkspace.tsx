@@ -11,6 +11,7 @@ import {
 import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { moveMarkdownFile, refreshNoteIndexes } from "../../../shared";
 import {
   createPathChangeOperation,
   getFailedOperationSteps,
@@ -134,19 +135,12 @@ const initialExplicitFolders = [
   normalizeFolderPath("Reading"),
 ] as const;
 
-const simulatedPathChangeGatewayMessage =
-  "Local file moves and index refreshes are simulated until desktop gateways are connected.";
-
 const desktopPathChangeExecutor = createDesktopPathChangeExecutor({
   fileGateway: {
-    async moveMarkdownFile() {
-      return Promise.resolve();
-    },
+    moveMarkdownFile,
   },
   indexGateway: {
-    async refreshNoteIndexes() {
-      return Promise.resolve();
-    },
+    refreshNoteIndexes,
   },
 });
 
@@ -479,7 +473,6 @@ function ActivePane({
           onOperationMessage={setOperationMessage}
         />
         <p className="folder-navigation__muted">{operationMessage}</p>
-        <p className="folder-navigation__muted">{simulatedPathChangeGatewayMessage}</p>
       </div>
     </section>
   );
