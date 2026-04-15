@@ -196,10 +196,10 @@
 }
 
 .folder-navigation__step {
-  align-items: center;
-  display: flex;
+  align-items: start;
+  display: grid;
   gap: 0.75rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .folder-navigation__status {
@@ -210,6 +210,25 @@
   font-size: 0.75rem;
   padding: 0.125rem 0.5rem;
   text-transform: uppercase;
+}
+
+.folder-navigation__status--completed {
+  background: #ddf3e7;
+  border-color: #1f7a5c;
+  color: #1d5a45;
+}
+
+.folder-navigation__status--failed {
+  background: #ffe8e2;
+  border-color: #c5553c;
+  color: #8f2f1b;
+}
+
+.folder-navigation__step-error {
+  color: #8f2f1b;
+  font-size: 0.75rem;
+  grid-column: 1 / -1;
+  line-height: 1.4;
 }
 
 .folder-navigation__path-changes {
@@ -250,7 +269,26 @@
   width: fit-content;
 }
 
+.folder-navigation__queue-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.folder-navigation__secondary-action {
+  background: #ffffff;
+  border: 1px solid #c8d3ca;
+  border-radius: 8px;
+  color: #17211b;
+  cursor: pointer;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  width: fit-content;
+}
+
 .folder-navigation__action:disabled,
+.folder-navigation__secondary-action:disabled,
 .folder-navigation__input:disabled {
   cursor: not-allowed;
   opacity: 0.55;

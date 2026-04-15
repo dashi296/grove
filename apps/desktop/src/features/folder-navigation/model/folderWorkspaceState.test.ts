@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest";
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import type { FolderWorkspaceState } from "./folderWorkspaceState";
 import {
+  completeNextOperationStep,
   createPathChangeOperation,
+  failNextOperationStep,
+  getFailedOperationSteps,
+  getNextPendingOperationStep,
+  isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
+  retryOperationStep,
 } from "./folderWorkspaceState";
 
 const workspaceState: FolderWorkspaceState = {
@@ -121,6 +127,87 @@ describe("createPathChangeOperation", () => {
     );
 
     expect(createPathChangeOperation("operation-1", mutation)).toBeNull();
+  });
+});
+
+describe("path change operation steps", () => {
+  it("completes file moves before index refreshes", () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const operation = createPathChangeOperation("operation-1", mutation);
+
+    if (operation === null) {
+      throw new Error("Expected path change operation.");
+    }
+
+    const afterFileMove = completeNextOperationStep([operation], "operation-1")[0];
+
+    expect(afterFileMove?.steps).toStrictEqual([
+      {
+        id: "file-move",
+        status: "completed",
+      },
+      {
+        id: "index-refresh",
+        status: "pending",
+      },
+    ]);
+    expect(
+      afterFileMove === undefined ? null : getNextPendingOperationStep(afterFileMove)?.id,
+    ).toBe("index-refresh");
+
+    const afterIndexRefresh = completeNextOperationStep([afterFileMove], "operation-1")[0];
+
+    expect(
+      afterIndexRefresh === undefined ? false : isPathChangeOperationComplete(afterIndexRefresh),
+    ).toBe(true);
+  });
+
+  it("blocks later steps until a failed step is retried", () => {
+    const mutation = renameFolderInWorkspace(
+      workspaceState,
+      normalizeFolderPath("Projects/Grove"),
+      normalizeFolderPath("Areas/Grove"),
+    );
+    const operation = createPathChangeOperation("operation-1", mutation);
+
+    if (operation === null) {
+      throw new Error("Expected path change operation.");
+    }
+
+    const failedOperations = failNextOperationStep(
+      [operation],
+      "operation-1",
+      "The target Markdown file already exists.",
+    );
+    const failedOperation = failedOperations[0];
+
+    expect(
+      failedOperation === undefined ? null : getNextPendingOperationStep(failedOperation),
+    ).toBe(null);
+    expect(
+      failedOperation === undefined ? [] : getFailedOperationSteps(failedOperation),
+    ).toStrictEqual([
+      {
+        id: "file-move",
+        errorMessage: "The target Markdown file already exists.",
+        status: "failed",
+      },
+    ]);
+
+    const retryOperations = retryOperationStep(failedOperations, "operation-1", "file-move");
+    const retryOperation = retryOperations[0];
+
+    expect(
+      retryOperation === undefined ? null : getNextPendingOperationStep(retryOperation)?.id,
+    ).toBe("file-move");
+    expect(retryOperation?.steps[0]).toStrictEqual({
+      id: "file-move",
+      status: "pending",
+    });
   });
 });
 
