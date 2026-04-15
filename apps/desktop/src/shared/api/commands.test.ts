@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { moveMarkdownFile, refreshNoteIndexes } from "./commands";
+import { moveMarkdownFile, refreshNoteIndexes, scanMarkdownWorkspace } from "./commands";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -46,6 +46,43 @@ describe("desktop command wrappers", () => {
         reason: "note-move",
       },
     });
+  });
+
+  it("invokes the Markdown workspace scan command", async () => {
+    invokeMock.mockResolvedValue([
+      {
+        path: "Projects/Grove/Plan.md",
+        title: "Workspace plan",
+        updatedAtUnixMs: 1776265200000,
+      },
+    ]);
+
+    await expect(scanMarkdownWorkspace()).resolves.toStrictEqual([
+      {
+        path: "Projects/Grove/Plan.md",
+        title: "Workspace plan",
+        updatedAtUnixMs: 1776265200000,
+      },
+    ]);
+    expect(invokeMock).toHaveBeenCalledWith("scan_markdown_workspace", {});
+  });
+
+  it("rejects invalid Markdown workspace scan results", async () => {
+    invokeMock.mockResolvedValue([{ path: "/Users/me/Notes/Plan.md", title: "Plan" }]);
+
+    await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
+  });
+
+  it("rejects non-finite Markdown workspace scan timestamps", async () => {
+    invokeMock.mockResolvedValue([
+      {
+        path: "Projects/Grove/Plan.md",
+        title: "Plan",
+        updatedAtUnixMs: Number.POSITIVE_INFINITY,
+      },
+    ]);
+
+    await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
   });
 
   it("preserves structured Tauri command messages when a command fails", async () => {

@@ -11,6 +11,12 @@ export type RefreshNoteIndexesCommand = {
   reason: "note-move" | "folder-rename";
 };
 
+export type ScannedMarkdownNote = {
+  path: string;
+  title: string;
+  updatedAtUnixMs: number;
+};
+
 export async function moveMarkdownFile(command: MoveMarkdownFileCommand): Promise<void> {
   await invokeCommand("move_markdown_file", { change: command });
 }
@@ -19,9 +25,26 @@ export async function refreshNoteIndexes(command: RefreshNoteIndexesCommand): Pr
   await invokeCommand("refresh_note_indexes", { refresh: command });
 }
 
+export async function scanMarkdownWorkspace(): Promise<ScannedMarkdownNote[]> {
+  const result = await invokeCommandResult("scan_markdown_workspace", {});
+
+  if (!isScannedMarkdownNotes(result)) {
+    throw new Error("The desktop scan command returned an invalid note list.");
+  }
+
+  return result;
+}
+
 async function invokeCommand(commandName: string, payload: Record<string, unknown>): Promise<void> {
+  await invokeCommandResult(commandName, payload);
+}
+
+async function invokeCommandResult(
+  commandName: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
   try {
-    await invoke(commandName, payload);
+    return await invoke(commandName, payload);
   } catch (error) {
     throw new Error(getCommandErrorMessage(error));
   }
@@ -49,5 +72,24 @@ function isCommandErrorPayload(error: unknown): error is { message: string } {
     error !== null &&
     "message" in error &&
     typeof error.message === "string"
+  );
+}
+
+function isScannedMarkdownNotes(value: unknown): value is ScannedMarkdownNote[] {
+  return Array.isArray(value) && value.every(isScannedMarkdownNote);
+}
+
+function isScannedMarkdownNote(value: unknown): value is ScannedMarkdownNote {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "path" in value &&
+    typeof value.path === "string" &&
+    "title" in value &&
+    typeof value.title === "string" &&
+    "updatedAtUnixMs" in value &&
+    typeof value.updatedAtUnixMs === "number" &&
+    Number.isFinite(value.updatedAtUnixMs) &&
+    value.updatedAtUnixMs >= 0
   );
 }

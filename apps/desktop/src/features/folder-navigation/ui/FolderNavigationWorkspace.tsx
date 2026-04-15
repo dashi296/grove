@@ -1,17 +1,17 @@
 import {
   appName,
   buildFolderTree,
+  compareWorkspacePaths,
   getFolderDisplayName,
   getFolderPathForNote,
   isNoteInFolderScope,
   normalizeFolderPath,
   normalizeFolderScope,
-  normalizeNoteFilePath,
 } from "@grove/core";
 import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { moveMarkdownFile, refreshNoteIndexes } from "../../../shared";
+import { moveMarkdownFile, refreshNoteIndexes, scanMarkdownWorkspace } from "../../../shared";
 import {
   clearCompletedPathChangeOperations,
   createPathChangeOperation,
@@ -27,6 +27,7 @@ import {
   runNextOperationStep,
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
+import { mapScannedMarkdownNotes } from "../model/workspaceScan";
 import type {
   FolderNavigationNote,
   FolderWorkspaceMutation,
@@ -61,6 +62,7 @@ type NoteListProps = {
   selectedFolderPath: FolderScope;
   scopedNotes: readonly NoteListItem[];
   selectedNoteId: string;
+  scanState: WorkspaceScanState;
   onSelectNote: (noteId: string) => void;
 };
 
@@ -99,43 +101,17 @@ type PathChangeQueueProps = {
   onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
 };
 
-const initialNotes: readonly NoteListItem[] = [
-  {
-    id: "note-inbox",
-    title: "Daily capture",
-    path: normalizeNoteFilePath("Inbox.md"),
-    updatedLabel: "Today",
-  },
-  {
-    id: "note-plan",
-    title: "Grove workspace plan",
-    path: normalizeNoteFilePath("Projects/Grove/Workspace Plan.md"),
-    updatedLabel: "Yesterday",
-  },
-  {
-    id: "note-research",
-    title: "Folder navigation notes",
-    path: normalizeNoteFilePath("Projects/Grove/Research/Folder Navigation.md"),
-    updatedLabel: "Apr 12",
-  },
-  {
-    id: "note-sync",
-    title: "Sync provider questions",
-    path: normalizeNoteFilePath("Projects/Sync/Provider Questions.md"),
-    updatedLabel: "Apr 10",
-  },
-  {
-    id: "note-archive",
-    title: "Launch retrospective",
-    path: normalizeNoteFilePath("Archive/2026/Launch Retro.md"),
-    updatedLabel: "Apr 8",
-  },
-];
+type WorkspaceScanState = {
+  status: "loading" | "ready" | "failed";
+  errorMessage: string | null;
+};
 
-const initialExplicitFolders = [
-  normalizeFolderPath("Projects/Grove/Ideas"),
-  normalizeFolderPath("Reading"),
-] as const;
+const initialWorkspaceState: FolderWorkspaceState = {
+  notes: [],
+  explicitFolders: [],
+  selectedFolderPath: null,
+  expandedFolderPaths: [],
+};
 
 const desktopPathChangeExecutor = createDesktopPathChangeExecutor({
   fileGateway: {
@@ -191,6 +167,73 @@ function getOperationStepLabel(stepId: FolderWorkspaceOperationStep["id"]): stri
 
 function getOperationStepStatusClass(step: FolderWorkspaceOperationStep): string {
   return `folder-navigation__status folder-navigation__status--${step.status}`;
+}
+
+function getExpandedFolderPathsForNotes(notes: readonly NoteListItem[]): string[] {
+  const folderPaths = new Set<string>();
+
+  for (const note of notes) {
+    const folderPath = getFolderPathForNote(note.path);
+
+    if (folderPath === null) {
+      continue;
+    }
+
+    const segments = folderPath.split("/");
+
+    for (let index = 1; index <= segments.length; index += 1) {
+      folderPaths.add(normalizeFolderPath(segments.slice(0, index).join("/")));
+    }
+  }
+
+  return [...folderPaths].sort(compareWorkspacePaths);
+}
+
+function getScanErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The Markdown workspace scan failed.";
+}
+
+function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
+  if (scanState.status === "loading") {
+    return <p className="folder-navigation__muted">Scanning Markdown files...</p>;
+  }
+
+  if (scanState.status === "failed") {
+    return (
+      <p className="folder-navigation__step-error">
+        {scanState.errorMessage ?? "The Markdown workspace scan failed."}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+type EmptyNoteListProps = {
+  selectedFolderPath: FolderScope;
+  scanState: WorkspaceScanState;
+};
+
+function EmptyNoteList({ selectedFolderPath, scanState }: EmptyNoteListProps) {
+  if (scanState.status === "loading") {
+    return null;
+  }
+
+  if (scanState.status === "failed") {
+    return (
+      <div className="folder-navigation__empty">
+        <h3 className="folder-navigation__note-title">No notes loaded</h3>
+        <p className="folder-navigation__muted">Fix the scan error and reopen this workspace.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="folder-navigation__empty">
+      <h3 className="folder-navigation__note-title">No notes here yet</h3>
+      <p className="folder-navigation__muted">Start in {getFolderLabel(selectedFolderPath)}.</p>
+    </div>
+  );
 }
 
 function FolderNode({
@@ -296,12 +339,14 @@ function NoteList({
   selectedFolderPath,
   scopedNotes,
   selectedNoteId,
+  scanState,
   onSelectNote,
 }: NoteListProps) {
   return (
     <section className="folder-navigation__note-list" aria-label="Notes">
       <p className="folder-navigation__eyebrow">{getFolderLabel(selectedFolderPath)}</p>
       <h2 className="folder-navigation__heading">Notes</h2>
+      <WorkspaceScanBanner scanState={scanState} />
       {scopedNotes.length > 0 ? (
         <ol className="folder-navigation__notes">
           {scopedNotes.map((note) => (
@@ -325,10 +370,7 @@ function NoteList({
           ))}
         </ol>
       ) : (
-        <div className="folder-navigation__empty">
-          <h3 className="folder-navigation__note-title">No notes here yet</h3>
-          <p className="folder-navigation__muted">Start in {getFolderLabel(selectedFolderPath)}.</p>
-        </div>
+        <EmptyNoteList selectedFolderPath={selectedFolderPath} scanState={scanState} />
       )}
     </section>
   );
@@ -587,13 +629,12 @@ function PathChangeQueue({
 }
 
 export function FolderNavigationWorkspace() {
-  const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>({
-    notes: initialNotes,
-    explicitFolders: initialExplicitFolders,
-    selectedFolderPath: null,
-    expandedFolderPaths: ["Projects", "Projects/Grove"],
+  const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>(initialWorkspaceState);
+  const [selectedNoteId, setSelectedNoteId] = useState<string>("");
+  const [scanState, setScanState] = useState<WorkspaceScanState>({
+    status: "loading",
+    errorMessage: null,
   });
-  const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[1]?.id ?? "");
   const [pathChangeOperations, setPathChangeOperations] = useState<
     readonly FolderWorkspacePathChangeOperation[]
   >([]);
@@ -723,6 +764,48 @@ export function FolderNavigationWorkspace() {
   }
 
   useEffect(() => {
+    let canceled = false;
+
+    async function scanWorkspace(): Promise<void> {
+      try {
+        const scannedNotes = await scanMarkdownWorkspace();
+        const notes = mapScannedMarkdownNotes(scannedNotes);
+
+        if (canceled) {
+          return;
+        }
+
+        setWorkspaceState({
+          notes,
+          explicitFolders: [],
+          selectedFolderPath: null,
+          expandedFolderPaths: getExpandedFolderPathsForNotes(notes),
+        });
+        setSelectedNoteId(notes[0]?.id ?? "");
+        setScanState({
+          status: "ready",
+          errorMessage: null,
+        });
+      } catch (error) {
+        if (canceled) {
+          return;
+        }
+
+        setScanState({
+          status: "failed",
+          errorMessage: getScanErrorMessage(error),
+        });
+      }
+    }
+
+    void scanWorkspace();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const nextRunnableOperationId = getNextRunnablePathChangeOperationId(
       pathChangeOperations,
       runningOperationIds,
@@ -749,6 +832,7 @@ export function FolderNavigationWorkspace() {
         selectedFolderPath={selectedFolderPath}
         scopedNotes={scopedNotes}
         selectedNoteId={selectedNoteId}
+        scanState={scanState}
         onSelectNote={setSelectedNoteId}
       />
       <ActivePane
