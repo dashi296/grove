@@ -12,15 +12,22 @@ import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  completeNextOperationStep,
   createPathChangeOperation,
+  failNextOperationStep,
+  getFailedOperationSteps,
+  getNextPendingOperationStep,
   isDescendantFolderPath,
+  isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
+  retryOperationStep,
 } from "../model/folderWorkspaceState";
 import type {
   FolderNavigationNote,
   FolderWorkspaceMutation,
+  FolderWorkspaceOperationStepId,
   FolderWorkspaceOperationStep,
   FolderWorkspacePathChange,
   FolderWorkspacePathChangeOperation,
@@ -83,6 +90,9 @@ type RenameFolderControlProps = {
 
 type PathChangeQueueProps = {
   operations: readonly FolderWorkspacePathChangeOperation[];
+  onCompleteNextStep: (operationId: string) => void;
+  onFailNextStep: (operationId: string) => void;
+  onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
 };
 
 const initialNotes: readonly NoteListItem[] = [
@@ -164,6 +174,10 @@ function getOperationReasonLabel(reason: FolderWorkspacePathChangeOperation["rea
 
 function getOperationStepLabel(stepId: FolderWorkspaceOperationStep["id"]): string {
   return stepId === "file-move" ? "Move Markdown files on disk" : "Refresh derived SQLite indexes";
+}
+
+function getOperationStepStatusClass(step: FolderWorkspaceOperationStep): string {
+  return `folder-navigation__status folder-navigation__status--${step.status}`;
 }
 
 function FolderNode({
@@ -453,42 +467,91 @@ function ActivePane({
   );
 }
 
-function PathChangeQueue({ operations }: PathChangeQueueProps) {
+function PathChangeQueue({
+  operations,
+  onCompleteNextStep,
+  onFailNextStep,
+  onRetryStep,
+}: PathChangeQueueProps) {
   return (
     <section className="folder-navigation__queue" aria-label="Pending path changes">
       <p className="folder-navigation__eyebrow">Local operations</p>
       <h2 className="folder-navigation__heading">Path change queue</h2>
       {operations.length > 0 ? (
         <ol className="folder-navigation__operations">
-          {operations.map((operation) => (
-            <li key={operation.id} className="folder-navigation__operation-item">
-              <div>
-                <h3 className="folder-navigation__operation-title">
-                  {getOperationReasonLabel(operation.reason)}
-                </h3>
-                <p className="folder-navigation__muted">
-                  {operation.pathChanges.length} file path{" "}
-                  {operation.pathChanges.length === 1 ? "change" : "changes"}
-                </p>
-              </div>
-              <ol className="folder-navigation__steps">
-                {operation.steps.map((step) => (
-                  <li key={step.id} className="folder-navigation__step">
-                    <span>{getOperationStepLabel(step.id)}</span>
-                    <span className="folder-navigation__status">{step.status}</span>
-                  </li>
-                ))}
-              </ol>
-              <ol className="folder-navigation__path-changes">
-                {operation.pathChanges.map((pathChange) => (
-                  <li key={`${operation.id}-${pathChange.noteId}`}>
-                    <span>{pathChange.previousPath}</span>
-                    <span>{pathChange.nextPath}</span>
-                  </li>
-                ))}
-              </ol>
-            </li>
-          ))}
+          {operations.map((operation) => {
+            const nextStep = getNextPendingOperationStep(operation);
+            const failedSteps = getFailedOperationSteps(operation);
+            const complete = isPathChangeOperationComplete(operation);
+
+            return (
+              <li key={operation.id} className="folder-navigation__operation-item">
+                <div>
+                  <h3 className="folder-navigation__operation-title">
+                    {getOperationReasonLabel(operation.reason)}
+                  </h3>
+                  <p className="folder-navigation__muted">
+                    {operation.pathChanges.length} file path{" "}
+                    {operation.pathChanges.length === 1 ? "change" : "changes"}
+                  </p>
+                </div>
+                <ol className="folder-navigation__steps">
+                  {operation.steps.map((step) => (
+                    <li key={step.id} className="folder-navigation__step">
+                      <span>{getOperationStepLabel(step.id)}</span>
+                      <span className={getOperationStepStatusClass(step)}>{step.status}</span>
+                      {step.errorMessage === undefined ? null : (
+                        <span className="folder-navigation__step-error">{step.errorMessage}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+                <div className="folder-navigation__queue-actions">
+                  <button
+                    type="button"
+                    className="folder-navigation__action"
+                    onClick={() => onCompleteNextStep(operation.id)}
+                    disabled={nextStep === null}
+                  >
+                    {nextStep === null
+                      ? "Waiting"
+                      : `Complete ${getOperationStepLabel(nextStep.id)}`}
+                  </button>
+                  <button
+                    type="button"
+                    className="folder-navigation__secondary-action"
+                    onClick={() => onFailNextStep(operation.id)}
+                    disabled={nextStep === null}
+                  >
+                    Mark next step failed
+                  </button>
+                  {failedSteps.map((step) => (
+                    <button
+                      key={step.id}
+                      type="button"
+                      className="folder-navigation__secondary-action"
+                      onClick={() => onRetryStep(operation.id, step.id)}
+                    >
+                      Retry {getOperationStepLabel(step.id)}
+                    </button>
+                  ))}
+                  {complete ? (
+                    <span className="folder-navigation__muted">
+                      File move and index refresh are complete.
+                    </span>
+                  ) : null}
+                </div>
+                <ol className="folder-navigation__path-changes">
+                  {operation.pathChanges.map((pathChange) => (
+                    <li key={`${operation.id}-${pathChange.noteId}`}>
+                      <span>{pathChange.previousPath}</span>
+                      <span>{pathChange.nextPath}</span>
+                    </li>
+                  ))}
+                </ol>
+              </li>
+            );
+          })}
         </ol>
       ) : (
         <div className="folder-navigation__empty">
@@ -572,6 +635,28 @@ export function FolderNavigationWorkspace() {
     setPathChangeOperations((currentOperations) => [operation, ...currentOperations]);
   }
 
+  function completeNextPathChangeStep(operationId: string): void {
+    setPathChangeOperations((currentOperations) =>
+      completeNextOperationStep(currentOperations, operationId),
+    );
+  }
+
+  function failNextPathChangeStep(operationId: string): void {
+    setPathChangeOperations((currentOperations) =>
+      failNextOperationStep(
+        currentOperations,
+        operationId,
+        "Local file work needs attention before indexes refresh.",
+      ),
+    );
+  }
+
+  function retryPathChangeStep(operationId: string, stepId: FolderWorkspaceOperationStepId): void {
+    setPathChangeOperations((currentOperations) =>
+      retryOperationStep(currentOperations, operationId, stepId),
+    );
+  }
+
   function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
     const mutation = moveNoteInFolderWorkspace(workspaceState, selectedNoteId, targetFolderPath);
     applyWorkspaceState(mutation.state);
@@ -622,7 +707,12 @@ export function FolderNavigationWorkspace() {
         onMoveSelectedNote={moveSelectedNote}
         onRenameSelectedFolder={renameSelectedFolder}
       />
-      <PathChangeQueue operations={pathChangeOperations} />
+      <PathChangeQueue
+        operations={pathChangeOperations}
+        onCompleteNextStep={completeNextPathChangeStep}
+        onFailNextStep={failNextPathChangeStep}
+        onRetryStep={retryPathChangeStep}
+      />
     </section>
   );
 }

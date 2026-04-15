@@ -34,9 +34,14 @@ export type FolderWorkspaceIndexRefresh = {
 
 type FolderWorkspaceIndexRefreshReason = FolderWorkspaceIndexRefresh["reason"];
 
+export type FolderWorkspaceOperationStepId = "file-move" | "index-refresh";
+
+export type FolderWorkspaceOperationStepStatus = "pending" | "completed" | "failed";
+
 export type FolderWorkspaceOperationStep = {
-  id: "file-move" | "index-refresh";
-  status: "pending";
+  id: FolderWorkspaceOperationStepId;
+  status: FolderWorkspaceOperationStepStatus;
+  errorMessage?: string;
 };
 
 export type FolderWorkspaceMutation = {
@@ -150,6 +155,88 @@ export function createPathChangeOperation(
       },
     ],
   };
+}
+
+export function getNextPendingOperationStep(
+  operation: FolderWorkspacePathChangeOperation,
+): FolderWorkspaceOperationStep | null {
+  if (operation.steps.some((step) => step.status === "failed")) {
+    return null;
+  }
+
+  return operation.steps.find((step) => step.status === "pending") ?? null;
+}
+
+export function getFailedOperationSteps(
+  operation: FolderWorkspacePathChangeOperation,
+): FolderWorkspaceOperationStep[] {
+  return operation.steps.filter((step) => step.status === "failed");
+}
+
+export function isPathChangeOperationComplete(
+  operation: FolderWorkspacePathChangeOperation,
+): boolean {
+  return operation.steps.every((step) => step.status === "completed");
+}
+
+export function completeNextOperationStep(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  operationId: string,
+): FolderWorkspacePathChangeOperation[] {
+  return operations.map((operation) => {
+    if (operation.id !== operationId) {
+      return operation;
+    }
+
+    const nextStep = getNextPendingOperationStep(operation);
+
+    if (nextStep === null) {
+      return operation;
+    }
+
+    return updateOperationStep(operation, nextStep.id, {
+      status: "completed",
+    });
+  });
+}
+
+export function failNextOperationStep(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  operationId: string,
+  errorMessage: string,
+): FolderWorkspacePathChangeOperation[] {
+  return operations.map((operation) => {
+    if (operation.id !== operationId) {
+      return operation;
+    }
+
+    const nextStep = getNextPendingOperationStep(operation);
+
+    if (nextStep === null) {
+      return operation;
+    }
+
+    return updateOperationStep(operation, nextStep.id, {
+      errorMessage,
+      status: "failed",
+    });
+  });
+}
+
+export function retryOperationStep(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  operationId: string,
+  stepId: FolderWorkspaceOperationStepId,
+): FolderWorkspacePathChangeOperation[] {
+  return operations.map((operation) => {
+    if (operation.id !== operationId) {
+      return operation;
+    }
+
+    return updateOperationStep(operation, stepId, {
+      status: "pending",
+    });
+  });
 }
 
 export function isDescendantFolderPath(
@@ -272,4 +359,31 @@ export function renameFolderInWorkspace(
     pathChanges,
     "folder-rename",
   );
+}
+
+function updateOperationStep(
+  operation: FolderWorkspacePathChangeOperation,
+  stepId: FolderWorkspaceOperationStepId,
+  nextStepState: Pick<FolderWorkspaceOperationStep, "status"> &
+    Partial<Pick<FolderWorkspaceOperationStep, "errorMessage">>,
+): FolderWorkspacePathChangeOperation {
+  return {
+    ...operation,
+    steps: operation.steps.map((step) => {
+      if (step.id !== stepId) {
+        return step;
+      }
+
+      return nextStepState.errorMessage === undefined
+        ? {
+            id: step.id,
+            status: nextStepState.status,
+          }
+        : {
+            id: step.id,
+            errorMessage: nextStepState.errorMessage,
+            status: nextStepState.status,
+          };
+    }),
+  };
 }
