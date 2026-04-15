@@ -85,7 +85,10 @@ apps/mobile/
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx
 │   │   ├── search.tsx
+│   │   ├── capture.tsx
 │   │   └── settings.tsx
+│   ├── folders/
+│   │   └── [...folderPath].tsx
 │   ├── note/
 │   │   └── [noteId].tsx
 │   ├── plugins/
@@ -132,11 +135,75 @@ apps/mobile/
 初期構成:
 
 - Expo Router の root stack で起動、workspace 選択、メインアプリを管理する
-- `(tabs)` グループで Notes、Search、Settings の bottom tabs を構成する
+- `(tabs)` グループで Notes、Search、Capture、Settings の bottom tabs を構成する
 - ノート編集画面は `app/note/[noteId].tsx` へ push する
+- フォルダ browsing は `app/folders/[...folderPath].tsx` のような stack 画面で drill-down する
 - プラグイン管理は Settings から `app/plugins/index.tsx` へ遷移する
 
 これにより、日常的なメモ追加と閲覧の導線を浅く保ちつつ、取り込みや同期トラブルのような補助フローはモーダルや別画面で扱えます。
+
+## フォルダナビゲーション
+
+mobile は desktop の 3 ペイン構成を持ち込まず、folder browsing を stack navigation と bottom tabs に分けます。
+共有の folder semantics は `packages/core` の `FolderScope` と `NoteFilePath` に従い、mobile state には workspace 相対 path だけを保持します。
+
+### Notes tab
+
+- Notes tab の初期画面は workspace root scope を表示する
+- root 画面では固定項目として All Notes、直下 folders、最近更新された notes を表示する
+- folder row を押すとその folder scope へ push し、子 folder と note list を表示する
+- child folder へ進むたびに stack を深くし、OS back gesture と header back で親 scope へ戻る
+- 現在の scope は route params から `FolderScope` に正規化する
+- deep link や stale route で存在しない folder scope を開いた場合は workspace root へ戻す
+
+### Selection and note opening
+
+- folder scope で note を選ぶと `app/note/[noteId].tsx` へ push する
+- note 画面から戻ると直前の folder scope と scroll position を復元する
+- active note が現在の folder scope 外に移動しても note 画面は閉じない
+- move / rename 後に現在の folder scope が消えた場合は root scope へ戻し、toast で状態を伝える
+- mobile は pane / tab を持たないため、重複オープン制御は navigation stack の同一 note route 置換で扱う
+
+### Search tab
+
+- Search tab は workspace 全体検索を初期状態にする
+- folder scope から検索へ遷移する場合は、現在の `FolderScope` を検索 filter の初期値として渡す
+- 検索結果から note を開いても、Notes tab 側の folder stack は維持する
+- 検索 filter は chips で明示し、root scope に戻す操作を 1 tap で出す
+
+### Capture tab
+
+- Capture tab は最後に閲覧していた folder scope を新規 note の保存先候補にする
+- folder route から capture を起動した場合は、その folder scope を明示的に渡す
+- 保存先 folder は sheet で変更でき、root scope は `Workspace root` と表示する
+- offline 中でも note 作成はローカル保存を優先し、同期状態は capture 完了をブロックしない
+
+### Empty states
+
+- workspace に note がない場合は root scope で新規 note 作成と import の導線を出す
+- folder scope に note がない場合は、その folder に note を作る導線を出す
+- explicit empty folder は note がなくても表示する
+- folder が消えた場合は root scope に戻し、再スキャン後の tree から表示を再構築する
+
+### State model
+
+- `selectedFolderScope`: 現在表示中の folder scope。route params から導出し、workspace root は `null` で表す
+- `lastBrowsedFolderScope`: capture の初期保存先に使う最後の閲覧 scope
+- `folderBrowseHistory`: stack 復元や scroll position 復元に使う route ごとの一時 state
+- `folderSearchFilter`: Search tab に渡す任意の folder scope filter
+
+folder tree、folder note count、scoped note list は永続化せず、`NoteFilePath[]` と explicit empty folders から再導出します。
+file move や index refresh が失敗しても Markdown ファイルを正本とし、次回 workspace scan で mobile navigation state を再同期します。
+
+### 後続実装スライス
+
+1. `features/folder-navigation/` に folder list、note list、empty state の screen model を追加する
+2. `app/folders/[...folderPath].tsx` で route params を `FolderScope` に正規化し、stale scope を root へ戻す
+3. Notes tab に root scope、child folder drill-down、note opening を接続する
+4. Capture tab に `lastBrowsedFolderScope` と保存先 folder sheet を接続する
+5. Search tab に optional folder filter chips を追加する
+6. folder move / rename 後の route reconciliation と toast を追加する
+7. component test で root、nested folder、empty folder、stale route、capture 保存先を確認する
 
 ## モバイル UX 方針
 
