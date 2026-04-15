@@ -6,6 +6,7 @@ import {
   readMarkdownNote,
   refreshNoteIndexes,
   scanMarkdownWorkspace,
+  writeMarkdownNote,
 } from "./commands";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -42,13 +43,13 @@ describe("desktop command wrappers", () => {
 
     await refreshNoteIndexes({
       noteIds: ["note-plan"],
-      reason: "note-move",
+      reason: "note-save",
     });
 
     expect(invokeMock).toHaveBeenCalledWith("refresh_note_indexes", {
       refresh: {
         noteIds: ["note-plan"],
-        reason: "note-move",
+        reason: "note-save",
       },
     });
   });
@@ -85,12 +86,48 @@ describe("desktop command wrappers", () => {
     });
   });
 
+  it("invokes the Markdown note write command", async () => {
+    invokeMock.mockResolvedValue({
+      path: "Projects/Grove/Plan.md",
+      title: "Workspace plan",
+      updatedAtUnixMs: 1776265200000,
+    });
+
+    await expect(
+      writeMarkdownNote({
+        path: "Projects/Grove/Plan.md",
+        content: "# Workspace plan\n\nSaved",
+      }),
+    ).resolves.toStrictEqual({
+      path: "Projects/Grove/Plan.md",
+      title: "Workspace plan",
+      updatedAtUnixMs: 1776265200000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("write_markdown_note", {
+      note: {
+        path: "Projects/Grove/Plan.md",
+        content: "# Workspace plan\n\nSaved",
+      },
+    });
+  });
+
   it("rejects invalid Markdown note read results", async () => {
     invokeMock.mockResolvedValue({ content: "# Plan" });
 
     await expect(readMarkdownNote({ path: "Projects/Grove/Plan.md" })).rejects.toThrow(
       "invalid note content",
     );
+  });
+
+  it("rejects invalid Markdown note write metadata", async () => {
+    invokeMock.mockResolvedValue({ path: "Projects/Grove/Plan.md", title: "Plan" });
+
+    await expect(
+      writeMarkdownNote({
+        path: "Projects/Grove/Plan.md",
+        content: "# Plan",
+      }),
+    ).rejects.toThrow("invalid note metadata");
   });
 
   it("rejects invalid Markdown workspace scan results", async () => {

@@ -58,14 +58,27 @@ export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer
   };
 }
 
-export function markNoteEditBufferError(
+export function markNoteEditBufferSaveFailed(
   buffer: NoteEditBuffer,
   errorMessage: string,
 ): NoteEditBuffer {
   return {
     ...buffer,
-    status: "error",
+    status: "dirty",
     errorMessage,
+  };
+}
+
+export function markNoteEditBufferSaved(
+  buffer: NoteEditBuffer,
+  savedContent: string,
+): NoteEditBuffer {
+  return {
+    ...buffer,
+    baseContent: savedContent,
+    draftContent: savedContent,
+    status: "clean",
+    errorMessage: null,
   };
 }
 

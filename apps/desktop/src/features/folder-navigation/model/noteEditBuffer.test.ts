@@ -5,7 +5,8 @@ import {
   createCleanNoteEditBuffer,
   createErroredNoteEditBuffer,
   discardNoteEditDraft,
-  markNoteEditBufferError,
+  markNoteEditBufferSaved,
+  markNoteEditBufferSaveFailed,
   markNoteEditBufferSaving,
   updateNoteEditDraft,
 } from "./noteEditBuffer";
@@ -41,19 +42,33 @@ describe("note edit buffer", () => {
     expect(updateNoteEditDraft(buffer, "# Plan").status).toBe("clean");
   });
 
-  it("tracks saving and error transitions without discarding the draft", () => {
+  it("keeps a failed save dirty without discarding the draft", () => {
     const dirtyBuffer = updateNoteEditDraft(
       createCleanNoteEditBuffer("note-plan", notePath, "# Plan"),
       "# Plan\n\nNext",
     );
     const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
-    const erroredBuffer = markNoteEditBufferError(savingBuffer, "Disk read failed.");
+    const erroredBuffer = markNoteEditBufferSaveFailed(savingBuffer, "Disk write failed.");
 
     expect(savingBuffer.status).toBe("saving");
     expect(erroredBuffer).toMatchObject({
       draftContent: "# Plan\n\nNext",
-      status: "error",
-      errorMessage: "Disk read failed.",
+      status: "dirty",
+      errorMessage: "Disk write failed.",
+    });
+  });
+
+  it("marks a saved draft clean and updates the loaded content", () => {
+    const dirtyBuffer = updateNoteEditDraft(
+      createCleanNoteEditBuffer("note-plan", notePath, "# Plan"),
+      "# Plan\n\nNext",
+    );
+
+    expect(markNoteEditBufferSaved(dirtyBuffer, "# Plan\n\nNext")).toMatchObject({
+      baseContent: "# Plan\n\nNext",
+      draftContent: "# Plan\n\nNext",
+      status: "clean",
+      errorMessage: null,
     });
   });
 

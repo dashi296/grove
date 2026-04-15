@@ -9,13 +9,14 @@ import {
   normalizeFolderScope,
 } from "@grove/core";
 import type { FolderScope, FolderTreeNode } from "@grove/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
   scanMarkdownWorkspace,
+  writeMarkdownNote,
 } from "../../../shared";
 import {
   clearCompletedPathChangeOperations,
@@ -36,6 +37,9 @@ import {
   createCleanNoteEditBuffer,
   createErroredNoteEditBuffer,
   discardNoteEditDraft,
+  markNoteEditBufferSaved,
+  markNoteEditBufferSaveFailed,
+  markNoteEditBufferSaving,
   updateNoteEditDraft,
 } from "../model/noteEditBuffer";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
@@ -94,6 +98,7 @@ type ActivePaneProps = {
   onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onEditContent: (content: string) => void;
+  onSaveDraft: () => void;
   onDiscardDraft: () => void;
 };
 
@@ -133,6 +138,7 @@ type NoteEditorProps = {
   editorLoadState: NoteEditorLoadState;
   editorNotice: string | null;
   onEditContent: (content: string) => void;
+  onSaveDraft: () => void;
   onDiscardDraft: () => void;
 };
 
@@ -225,6 +231,10 @@ function getScanErrorMessage(error: unknown): string {
 
 function getNoteReadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be read.";
+}
+
+function getNoteSaveErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The Markdown note could not be saved.";
 }
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
@@ -520,6 +530,7 @@ function NoteEditor({
   editorLoadState,
   editorNotice,
   onEditContent,
+  onSaveDraft,
   onDiscardDraft,
 }: NoteEditorProps) {
   if (selectedNote === undefined) {
@@ -544,6 +555,14 @@ function NoteEditor({
         </span>
         <button
           type="button"
+          className="folder-navigation__action"
+          onClick={onSaveDraft}
+          disabled={noteEditBuffer.status !== "dirty"}
+        >
+          Save
+        </button>
+        <button
+          type="button"
           className="folder-navigation__secondary-action"
           onClick={onDiscardDraft}
           disabled={noteEditBuffer.status !== "dirty"}
@@ -561,7 +580,7 @@ function NoteEditor({
         className="folder-navigation__textarea"
         value={noteEditBuffer.draftContent}
         onChange={(event) => onEditContent(event.target.value)}
-        disabled={noteEditBuffer.status === "error"}
+        disabled={noteEditBuffer.status === "error" || noteEditBuffer.status === "saving"}
         aria-label={`Markdown content for ${selectedNote.title}`}
       />
     </div>
@@ -579,6 +598,7 @@ function ActivePane({
   onMoveSelectedNote,
   onRenameSelectedFolder,
   onEditContent,
+  onSaveDraft,
   onDiscardDraft,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
@@ -602,6 +622,7 @@ function ActivePane({
               editorLoadState={editorLoadState}
               editorNotice={editorNotice}
               onEditContent={onEditContent}
+              onSaveDraft={onSaveDraft}
               onDiscardDraft={onDiscardDraft}
             />
             <MoveNoteControl
@@ -794,11 +815,11 @@ export function FolderNavigationWorkspace() {
 
   function selectNote(noteId: string): void {
     if (
-      noteEditBuffer?.status === "dirty" &&
+      (noteEditBuffer?.status === "dirty" || noteEditBuffer?.status === "saving") &&
       noteEditBuffer.noteId !== noteId &&
       selectedNoteId !== noteId
     ) {
-      setEditorNotice("Discard the current draft before opening another note.");
+      setEditorNotice("Save or discard the current draft before opening another note.");
       return;
     }
 
@@ -894,6 +915,48 @@ export function FolderNavigationWorkspace() {
     });
     setEditorNotice(null);
   }
+
+  const saveSelectedNoteDraft = useCallback(async (): Promise<void> => {
+    const buffer = noteEditBuffer;
+
+    if (buffer === null || buffer.status !== "dirty") {
+      return;
+    }
+
+    setNoteEditBuffer(markNoteEditBufferSaving(buffer));
+    setEditorNotice(null);
+
+    try {
+      const savedNote = await writeMarkdownNote({
+        path: buffer.path,
+        content: buffer.draftContent,
+      });
+      const [updatedNote] = mapScannedMarkdownNotes([savedNote]);
+
+      setWorkspaceState((currentState) =>
+        reconcileFolderWorkspaceState({
+          ...currentState,
+          notes: currentState.notes.map((note) => {
+            return note.id === buffer.noteId
+              ? { ...note, ...updatedNote, id: buffer.noteId }
+              : note;
+          }),
+        }),
+      );
+      setNoteEditBuffer(markNoteEditBufferSaved(buffer, buffer.draftContent));
+
+      try {
+        await refreshNoteIndexes({
+          noteIds: [buffer.noteId],
+          reason: "note-save",
+        });
+      } catch (error) {
+        setEditorNotice(`Saved, but index refresh failed: ${getNoteSaveErrorMessage(error)}`);
+      }
+    } catch (error) {
+      setNoteEditBuffer(markNoteEditBufferSaveFailed(buffer, getNoteSaveErrorMessage(error)));
+    }
+  }, [noteEditBuffer]);
 
   function discardSelectedDraft(): void {
     setNoteEditBuffer((currentBuffer) => {
@@ -1017,6 +1080,23 @@ export function FolderNavigationWorkspace() {
   }, [selectedNote?.id, selectedNote?.path]);
 
   useEffect(() => {
+    function saveOnKeyboardShortcut(event: KeyboardEvent): void {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") {
+        return;
+      }
+
+      event.preventDefault();
+      void saveSelectedNoteDraft();
+    }
+
+    window.addEventListener("keydown", saveOnKeyboardShortcut);
+
+    return () => {
+      window.removeEventListener("keydown", saveOnKeyboardShortcut);
+    };
+  }, [saveSelectedNoteDraft]);
+
+  useEffect(() => {
     const nextRunnableOperationId = getNextRunnablePathChangeOperationId(
       pathChangeOperations,
       runningOperationIds,
@@ -1057,6 +1137,9 @@ export function FolderNavigationWorkspace() {
         onMoveSelectedNote={moveSelectedNote}
         onRenameSelectedFolder={renameSelectedFolder}
         onEditContent={editSelectedNoteContent}
+        onSaveDraft={() => {
+          void saveSelectedNoteDraft();
+        }}
         onDiscardDraft={discardSelectedDraft}
       />
       <PathChangeQueue

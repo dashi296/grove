@@ -30,11 +30,19 @@ struct ReadMarkdownNoteRequest {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteMarkdownNoteRequest {
+    path: String,
+    content: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum IndexRefreshReason {
     NoteMove,
     FolderRename,
+    NoteSave,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,13 +147,31 @@ async fn read_markdown_note(
         .map_err(|error| CommandError::new("note_read_failed", error.to_string()))
 }
 
+#[tauri::command]
+async fn write_markdown_note(
+    app_handle: tauri::AppHandle,
+    note: WriteMarkdownNoteRequest,
+) -> Result<ScannedMarkdownNote, CommandError> {
+    let workspace_root = default_workspace_root(&app_handle)?;
+    let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
+
+    write_markdown_file(&note_path, note.content.as_bytes())
+        .await
+        .map_err(|error| CommandError::new("note_write_failed", error.to_string()))?;
+
+    summarize_markdown_file(&workspace_root, &note_path)
+        .await
+        .map_err(|error| CommandError::new("note_write_failed", error.to_string()))
+}
+
 fn main() {
     if let Err(error) = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             move_markdown_file,
             read_markdown_note,
             refresh_note_indexes,
-            scan_markdown_workspace
+            scan_markdown_workspace,
+            write_markdown_note
         ])
         .run(tauri::generate_context!())
     {
@@ -239,16 +265,7 @@ async fn scan_markdown_files(workspace_root: &Path) -> anyhow::Result<Vec<Scanne
                 continue;
             }
 
-            let relative_path = get_workspace_relative_markdown_path(workspace_root, &path)?;
-            let metadata = entry.metadata().await?;
-            let updated_at_unix_ms = system_time_to_unix_ms(metadata.modified()?);
-            let title = read_note_title(&path).await?;
-
-            notes.push(ScannedMarkdownNote {
-                path: relative_path,
-                title,
-                updated_at_unix_ms,
-            });
+            notes.push(summarize_markdown_file(workspace_root, &path).await?);
         }
     }
 
@@ -315,6 +332,33 @@ async fn read_markdown_file(path: &Path) -> anyhow::Result<String> {
     let mut content = String::new();
     file.read_to_string(&mut content).await?;
     Ok(content)
+}
+
+async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> {
+    if let Some(parent_path) = path.parent() {
+        tokio::fs::create_dir_all(parent_path).await?;
+    }
+
+    let mut file = tokio::fs::File::create(path).await?;
+    file.write_all(content).await?;
+    file.flush().await?;
+    Ok(())
+}
+
+async fn summarize_markdown_file(
+    workspace_root: &Path,
+    markdown_path: &Path,
+) -> anyhow::Result<ScannedMarkdownNote> {
+    let relative_path = get_workspace_relative_markdown_path(workspace_root, markdown_path)?;
+    let metadata = tokio::fs::metadata(markdown_path).await?;
+    let updated_at_unix_ms = system_time_to_unix_ms(metadata.modified()?);
+    let title = read_note_title(markdown_path).await?;
+
+    Ok(ScannedMarkdownNote {
+        path: relative_path,
+        title,
+        updated_at_unix_ms,
+    })
 }
 
 fn find_first_markdown_heading(content: &str) -> Option<String> {
@@ -431,7 +475,7 @@ mod tests {
     use super::{
         find_first_markdown_heading, get_workspace_relative_markdown_path,
         move_file_without_overwrite, read_markdown_file, scan_markdown_files,
-        system_time_to_unix_ms, validate_markdown_path,
+        system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -579,6 +623,24 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("Markdown read should succeed");
+    }
+
+    #[test]
+    fn writes_markdown_file_content() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("writes-markdown-file-content");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+
+            write_markdown_file(&note_path, b"# Plan\n\nSaved").await?;
+
+            assert_eq!(
+                tokio::fs::read_to_string(&note_path).await?,
+                "# Plan\n\nSaved"
+            );
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("Markdown write should succeed");
     }
 
     #[test]
