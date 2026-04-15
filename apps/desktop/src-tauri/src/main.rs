@@ -340,14 +340,22 @@ async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> 
     }
 
     let temporary_path = get_temporary_write_path(path)?;
-    let mut file = tokio::fs::File::create(&temporary_path).await?;
-    file.write_all(content).await?;
-    file.flush().await?;
-    file.sync_all().await?;
-    drop(file);
+    let write_result = async {
+        let mut file = tokio::fs::File::create(&temporary_path).await?;
+        file.write_all(content).await?;
+        file.flush().await?;
+        file.sync_all().await?;
+        drop(file);
 
-    tokio::fs::rename(&temporary_path, path).await?;
-    Ok(())
+        replace_file_with_temporary_path(&temporary_path, path).await
+    }
+    .await;
+
+    if write_result.is_err() {
+        let _ = tokio::fs::remove_file(&temporary_path).await;
+    }
+
+    write_result
 }
 
 fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
@@ -359,6 +367,21 @@ fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
     let temporary_file_name = format!(".{file_name}.{}.{}.tmp", std::process::id(), timestamp);
 
     Ok(path.with_file_name(temporary_file_name))
+}
+
+async fn replace_file_with_temporary_path(
+    temporary_path: &Path,
+    path: &Path,
+) -> anyhow::Result<()> {
+    #[cfg(windows)]
+    {
+        if tokio::fs::try_exists(path).await? {
+            tokio::fs::remove_file(path).await?;
+        }
+    }
+
+    tokio::fs::rename(temporary_path, path).await?;
+    Ok(())
 }
 
 async fn summarize_markdown_file(
@@ -689,6 +712,31 @@ mod tests {
             .file_name()
             .and_then(|file_name| file_name.to_str())
             .is_some_and(|file_name| file_name.starts_with(".Plan.md.")));
+    }
+
+    #[test]
+    fn removes_temporary_file_when_markdown_write_fails() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("removes-temporary-file-when-write-fails");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+            tokio::fs::create_dir_all(&note_path).await?;
+
+            let error = write_markdown_file(&note_path, b"# Plan")
+                .await
+                .expect_err("directory targets should reject file writes");
+            assert!(error.to_string().contains("directory"));
+
+            let mut entries = tokio::fs::read_dir(note_path.parent().expect("note parent")).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let file_name = entry.file_name();
+                let file_name = file_name.to_string_lossy();
+                assert!(!file_name.starts_with(".Plan.md."));
+            }
+
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("temporary cleanup test should run");
     }
 
     #[test]

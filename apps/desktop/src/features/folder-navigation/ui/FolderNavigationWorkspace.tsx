@@ -18,6 +18,7 @@ import {
   scanMarkdownWorkspace,
   writeMarkdownNote,
 } from "../../../shared";
+import type { ScannedMarkdownNote } from "../../../shared";
 import {
   clearCompletedPathChangeOperations,
   createPathChangeOperation,
@@ -930,6 +931,48 @@ export function FolderNavigationWorkspace() {
     setEditorNotice(null);
   }
 
+  function applySavedNoteMetadata(buffer: NoteEditBuffer, savedNote: ScannedMarkdownNote): void {
+    const [updatedNote] = mapScannedMarkdownNotes([savedNote]);
+
+    setWorkspaceState((currentState) =>
+      reconcileFolderWorkspaceState({
+        ...currentState,
+        notes: currentState.notes.map((note) => {
+          if (note.id !== buffer.noteId) {
+            return note;
+          }
+
+          return {
+            ...note,
+            ...updatedNote,
+            id: buffer.noteId,
+            path: note.path === buffer.path ? updatedNote.path : note.path,
+          };
+        }),
+      }),
+    );
+  }
+
+  function markSelectedNoteDraftSaved(buffer: NoteEditBuffer): void {
+    setNoteEditBuffer((currentBuffer) => {
+      if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
+        return currentBuffer;
+      }
+
+      return markNoteEditBufferSaved(currentBuffer, buffer.draftContent);
+    });
+  }
+
+  function markSelectedNoteDraftSaveFailed(buffer: NoteEditBuffer, error: unknown): void {
+    setNoteEditBuffer((currentBuffer) => {
+      if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
+        return currentBuffer;
+      }
+
+      return markNoteEditBufferSaveFailed(currentBuffer, getNoteSaveErrorMessage(error));
+    });
+  }
+
   const saveSelectedNoteDraft = useCallback(async (): Promise<void> => {
     const buffer = noteEditBuffer;
 
@@ -950,32 +993,8 @@ export function FolderNavigationWorkspace() {
         path: buffer.path,
         content: buffer.draftContent,
       });
-      const [updatedNote] = mapScannedMarkdownNotes([savedNote]);
-
-      setWorkspaceState((currentState) =>
-        reconcileFolderWorkspaceState({
-          ...currentState,
-          notes: currentState.notes.map((note) => {
-            if (note.id !== buffer.noteId) {
-              return note;
-            }
-
-            return {
-              ...note,
-              ...updatedNote,
-              id: buffer.noteId,
-              path: note.path === buffer.path ? updatedNote.path : note.path,
-            };
-          }),
-        }),
-      );
-      setNoteEditBuffer((currentBuffer) => {
-        if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
-          return currentBuffer;
-        }
-
-        return markNoteEditBufferSaved(currentBuffer, buffer.draftContent);
-      });
+      applySavedNoteMetadata(buffer, savedNote);
+      markSelectedNoteDraftSaved(buffer);
 
       try {
         await refreshNoteIndexes({
@@ -986,13 +1005,7 @@ export function FolderNavigationWorkspace() {
         setEditorNotice(`Saved, but index refresh failed: ${getNoteSaveErrorMessage(error)}`);
       }
     } catch (error) {
-      setNoteEditBuffer((currentBuffer) => {
-        if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
-          return currentBuffer;
-        }
-
-        return markNoteEditBufferSaveFailed(currentBuffer, getNoteSaveErrorMessage(error));
-      });
+      markSelectedNoteDraftSaveFailed(buffer, error);
     } finally {
       savingNoteIdSet.current.delete(buffer.noteId);
     }
