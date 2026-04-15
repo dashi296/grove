@@ -1,7 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { moveMarkdownFile, refreshNoteIndexes, scanMarkdownWorkspace } from "./commands";
+import {
+  moveMarkdownFile,
+  readMarkdownNote,
+  refreshNoteIndexes,
+  scanMarkdownWorkspace,
+} from "./commands";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -65,6 +70,27 @@ describe("desktop command wrappers", () => {
       },
     ]);
     expect(invokeMock).toHaveBeenCalledWith("scan_markdown_workspace", {});
+  });
+
+  it("invokes the Markdown note read command", async () => {
+    invokeMock.mockResolvedValue("# Workspace plan\n\nDraft");
+
+    await expect(readMarkdownNote({ path: "Projects/Grove/Plan.md" })).resolves.toBe(
+      "# Workspace plan\n\nDraft",
+    );
+    expect(invokeMock).toHaveBeenCalledWith("read_markdown_note", {
+      note: {
+        path: "Projects/Grove/Plan.md",
+      },
+    });
+  });
+
+  it("rejects invalid Markdown note read results", async () => {
+    invokeMock.mockResolvedValue({ content: "# Plan" });
+
+    await expect(readMarkdownNote({ path: "Projects/Grove/Plan.md" })).rejects.toThrow(
+      "invalid note content",
+    );
   });
 
   it("rejects invalid Markdown workspace scan results", async () => {

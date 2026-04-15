@@ -17,6 +17,10 @@ export type ScannedMarkdownNote = {
   updatedAtUnixMs: number;
 };
 
+export type ReadMarkdownNoteCommand = {
+  path: string;
+};
+
 export async function moveMarkdownFile(command: MoveMarkdownFileCommand): Promise<void> {
   await invokeCommand("move_markdown_file", { change: command });
 }
@@ -30,6 +34,16 @@ export async function scanMarkdownWorkspace(): Promise<ScannedMarkdownNote[]> {
 
   if (!isScannedMarkdownNotes(result)) {
     throw new Error("The desktop scan command returned an invalid note list.");
+  }
+
+  return result;
+}
+
+export async function readMarkdownNote(command: ReadMarkdownNoteCommand): Promise<string> {
+  const result = await invokeCommandResult("read_markdown_note", { note: command });
+
+  if (typeof result !== "string") {
+    throw new Error("The desktop read command returned invalid note content.");
   }
 
   return result;
