@@ -585,6 +585,7 @@ export function FolderNavigationWorkspace() {
     readonly FolderWorkspacePathChangeOperation[]
   >([]);
   const [runningOperationIds, setRunningOperationIds] = useState<readonly string[]>([]);
+  const runningOperationIdSet = useRef(new Set<string>());
   const nextOperationNumber = useRef(1);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
 
@@ -655,10 +656,11 @@ export function FolderNavigationWorkspace() {
       return currentOperation.id === operationId;
     });
 
-    if (operation === undefined || runningOperationIds.includes(operationId)) {
+    if (operation === undefined || runningOperationIdSet.current.has(operationId)) {
       return;
     }
 
+    runningOperationIdSet.current.add(operationId);
     setRunningOperationIds((currentOperationIds) => [...currentOperationIds, operationId]);
 
     try {
@@ -670,6 +672,7 @@ export function FolderNavigationWorkspace() {
         }),
       );
     } finally {
+      runningOperationIdSet.current.delete(operationId);
       setRunningOperationIds((currentOperationIds) =>
         currentOperationIds.filter((currentOperationId) => currentOperationId !== operationId),
       );
