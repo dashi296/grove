@@ -37,6 +37,19 @@
   margin: 0 0 1rem;
 }
 
+.folder-navigation__queue-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.folder-navigation__queue-heading .folder-navigation__heading {
+  margin: 0;
+}
+
 .folder-navigation__root-button,
 .folder-navigation__folder-button {
   align-items: center;

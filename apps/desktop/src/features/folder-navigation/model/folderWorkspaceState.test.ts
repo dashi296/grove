@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import type { FolderWorkspaceState } from "./folderWorkspaceState";
 import {
+  clearCompletedPathChangeOperations,
   completeNextOperationStep,
   createPathChangeOperation,
   failNextOperationStep,
@@ -319,6 +320,45 @@ describe("path change operation steps", () => {
       id: "file-move",
       status: "pending",
     });
+  });
+
+  it("clears completed operations while keeping failed and pending work visible", () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const completedOperation = createPathChangeOperation("operation-complete", mutation);
+    const pendingOperation = createPathChangeOperation("operation-pending", mutation);
+    const failedOperation = createPathChangeOperation("operation-failed", mutation);
+
+    if (completedOperation === null || pendingOperation === null || failedOperation === null) {
+      throw new Error("Expected path change operations.");
+    }
+
+    const completedOperations = completeNextOperationStep(
+      completeNextOperationStep([completedOperation], "operation-complete"),
+      "operation-complete",
+    );
+    const failedOperations = failNextOperationStep(
+      [failedOperation],
+      "operation-failed",
+      "File move failed.",
+    );
+    const completedOperationAfterSteps = completedOperations[0];
+    const failedOperationAfterStep = failedOperations[0];
+
+    if (completedOperationAfterSteps === undefined || failedOperationAfterStep === undefined) {
+      throw new Error("Expected updated path change operations.");
+    }
+
+    expect(
+      clearCompletedPathChangeOperations([
+        pendingOperation,
+        completedOperationAfterSteps,
+        failedOperationAfterStep,
+      ]).map((operation) => operation.id),
+    ).toStrictEqual(["operation-pending", "operation-failed"]);
   });
 
   it("runs file move and index refresh steps through the executor", async () => {
