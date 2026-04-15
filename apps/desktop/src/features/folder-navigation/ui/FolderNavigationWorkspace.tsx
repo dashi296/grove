@@ -133,15 +133,18 @@ const initialExplicitFolders = [
   normalizeFolderPath("Reading"),
 ] as const;
 
+const disconnectedPathChangeGatewayMessage =
+  "Desktop local file and index gateways are not connected yet.";
+
 const desktopPathChangeExecutor = createDesktopPathChangeExecutor({
   fileGateway: {
     async moveMarkdownFile() {
-      await Promise.resolve();
+      throw new Error(disconnectedPathChangeGatewayMessage);
     },
   },
   indexGateway: {
     async refreshNoteIndexes() {
-      await Promise.resolve();
+      throw new Error(disconnectedPathChangeGatewayMessage);
     },
   },
 });
