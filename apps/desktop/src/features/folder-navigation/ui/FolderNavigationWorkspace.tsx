@@ -133,18 +133,18 @@ const initialExplicitFolders = [
   normalizeFolderPath("Reading"),
 ] as const;
 
-const disconnectedPathChangeGatewayMessage =
-  "Desktop local file and index gateways are not connected yet.";
+const simulatedPathChangeGatewayMessage =
+  "Local file moves and index refreshes are simulated until desktop gateways are connected.";
 
 const desktopPathChangeExecutor = createDesktopPathChangeExecutor({
   fileGateway: {
     async moveMarkdownFile() {
-      throw new Error(disconnectedPathChangeGatewayMessage);
+      return Promise.resolve();
     },
   },
   indexGateway: {
     async refreshNoteIndexes() {
-      throw new Error(disconnectedPathChangeGatewayMessage);
+      return Promise.resolve();
     },
   },
 });
@@ -451,7 +451,7 @@ function ActivePane({
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
-    "Path changes refresh the folder tree and note list immediately.",
+    "Path changes refresh the folder tree and note list immediately. Local file work is simulated.",
   );
 
   return (
@@ -478,6 +478,7 @@ function ActivePane({
           onOperationMessage={setOperationMessage}
         />
         <p className="folder-navigation__muted">{operationMessage}</p>
+        <p className="folder-navigation__muted">{simulatedPathChangeGatewayMessage}</p>
       </div>
     </section>
   );
