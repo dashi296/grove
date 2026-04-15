@@ -139,21 +139,26 @@ function assertPathChangesDoNotConflict(
     return;
   }
 
-  const pathOwners = new Map<NoteFilePath, string>();
+  const pathChangesByNoteId = new Map<string, FolderWorkspacePathChange>();
+  const finalPathOwners = new Map<NoteFilePath, string[]>();
+
+  for (const pathChange of pathChanges) {
+    pathChangesByNoteId.set(pathChange.noteId, pathChange);
+  }
 
   for (const note of notes) {
-    pathOwners.set(note.path, note.id);
+    const finalPath = pathChangesByNoteId.get(note.id)?.nextPath ?? note.path;
+    const ownerIds = finalPathOwners.get(finalPath) ?? [];
+
+    finalPathOwners.set(finalPath, [...ownerIds, note.id]);
   }
 
   for (const pathChange of pathChanges) {
-    const existingOwnerId = pathOwners.get(pathChange.nextPath);
+    const ownerIds = finalPathOwners.get(pathChange.nextPath) ?? [];
 
-    if (existingOwnerId !== undefined && existingOwnerId !== pathChange.noteId) {
+    if (ownerIds.some((ownerId) => ownerId !== pathChange.noteId)) {
       throw new Error("A note already uses the target Markdown path.");
     }
-
-    pathOwners.delete(pathChange.previousPath);
-    pathOwners.set(pathChange.nextPath, pathChange.noteId);
   }
 }
 
