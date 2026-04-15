@@ -12,9 +12,7 @@ import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  completeNextOperationStep,
   createPathChangeOperation,
-  failNextOperationStep,
   getFailedOperationSteps,
   getNextPendingOperationStep,
   isDescendantFolderPath,
@@ -23,7 +21,9 @@ import {
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
   retryOperationStep,
+  runNextOperationStep,
 } from "../model/folderWorkspaceState";
+import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
 import type {
   FolderNavigationNote,
   FolderWorkspaceMutation,
@@ -90,8 +90,8 @@ type RenameFolderControlProps = {
 
 type PathChangeQueueProps = {
   operations: readonly FolderWorkspacePathChangeOperation[];
-  onCompleteNextStep: (operationId: string) => void;
-  onFailNextStep: (operationId: string) => void;
+  runningOperationIds: readonly string[];
+  onRunNextStep: (operationId: string) => void;
   onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
 };
 
@@ -132,6 +132,22 @@ const initialExplicitFolders = [
   normalizeFolderPath("Projects/Grove/Ideas"),
   normalizeFolderPath("Reading"),
 ] as const;
+
+const simulatedPathChangeGatewayMessage =
+  "Local file moves and index refreshes are simulated until desktop gateways are connected.";
+
+const desktopPathChangeExecutor = createDesktopPathChangeExecutor({
+  fileGateway: {
+    async moveMarkdownFile() {
+      return Promise.resolve();
+    },
+  },
+  indexGateway: {
+    async refreshNoteIndexes() {
+      return Promise.resolve();
+    },
+  },
+});
 
 function filterNotesByFolderScope(
   noteList: readonly NoteListItem[],
@@ -435,7 +451,7 @@ function ActivePane({
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
-    "Path changes refresh the folder tree and note list immediately.",
+    "Path changes refresh the folder tree and note list immediately. Local file work is simulated.",
   );
 
   return (
@@ -462,6 +478,7 @@ function ActivePane({
           onOperationMessage={setOperationMessage}
         />
         <p className="folder-navigation__muted">{operationMessage}</p>
+        <p className="folder-navigation__muted">{simulatedPathChangeGatewayMessage}</p>
       </div>
     </section>
   );
@@ -469,8 +486,8 @@ function ActivePane({
 
 function PathChangeQueue({
   operations,
-  onCompleteNextStep,
-  onFailNextStep,
+  runningOperationIds,
+  onRunNextStep,
   onRetryStep,
 }: PathChangeQueueProps) {
   return (
@@ -483,6 +500,7 @@ function PathChangeQueue({
             const nextStep = getNextPendingOperationStep(operation);
             const failedSteps = getFailedOperationSteps(operation);
             const complete = isPathChangeOperationComplete(operation);
+            const running = runningOperationIds.includes(operation.id);
 
             return (
               <li key={operation.id} className="folder-navigation__operation-item">
@@ -510,20 +528,14 @@ function PathChangeQueue({
                   <button
                     type="button"
                     className="folder-navigation__action"
-                    onClick={() => onCompleteNextStep(operation.id)}
-                    disabled={nextStep === null}
+                    onClick={() => onRunNextStep(operation.id)}
+                    disabled={nextStep === null || running}
                   >
-                    {nextStep === null
-                      ? "Waiting"
-                      : `Complete ${getOperationStepLabel(nextStep.id)}`}
-                  </button>
-                  <button
-                    type="button"
-                    className="folder-navigation__secondary-action"
-                    onClick={() => onFailNextStep(operation.id)}
-                    disabled={nextStep === null}
-                  >
-                    Mark next step failed
+                    {running
+                      ? "Running"
+                      : nextStep === null
+                        ? "Waiting"
+                        : `Run ${getOperationStepLabel(nextStep.id)}`}
                   </button>
                   {failedSteps.map((step) => (
                     <button
@@ -576,6 +588,8 @@ export function FolderNavigationWorkspace() {
   const [pathChangeOperations, setPathChangeOperations] = useState<
     readonly FolderWorkspacePathChangeOperation[]
   >([]);
+  const [runningOperationIds, setRunningOperationIds] = useState<readonly string[]>([]);
+  const runningOperationIdSet = useRef(new Set<string>());
   const nextOperationNumber = useRef(1);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
 
@@ -635,26 +649,38 @@ export function FolderNavigationWorkspace() {
     setPathChangeOperations((currentOperations) => [operation, ...currentOperations]);
   }
 
-  function completeNextPathChangeStep(operationId: string): void {
-    setPathChangeOperations((currentOperations) =>
-      completeNextOperationStep(currentOperations, operationId),
-    );
-  }
-
-  function failNextPathChangeStep(operationId: string): void {
-    setPathChangeOperations((currentOperations) =>
-      failNextOperationStep(
-        currentOperations,
-        operationId,
-        "Local file work needs attention before indexes refresh.",
-      ),
-    );
-  }
-
   function retryPathChangeStep(operationId: string, stepId: FolderWorkspaceOperationStepId): void {
     setPathChangeOperations((currentOperations) =>
       retryOperationStep(currentOperations, operationId, stepId),
     );
+  }
+
+  async function runNextPathChangeStep(operationId: string): Promise<void> {
+    const operation = pathChangeOperations.find((currentOperation) => {
+      return currentOperation.id === operationId;
+    });
+
+    if (operation === undefined || runningOperationIdSet.current.has(operationId)) {
+      return;
+    }
+
+    runningOperationIdSet.current.add(operationId);
+    setRunningOperationIds((currentOperationIds) => [...currentOperationIds, operationId]);
+
+    try {
+      const nextOperation = await runNextOperationStep(operation, desktopPathChangeExecutor);
+
+      setPathChangeOperations((currentOperations) =>
+        currentOperations.map((currentOperation) => {
+          return currentOperation.id === operationId ? nextOperation : currentOperation;
+        }),
+      );
+    } finally {
+      runningOperationIdSet.current.delete(operationId);
+      setRunningOperationIds((currentOperationIds) =>
+        currentOperationIds.filter((currentOperationId) => currentOperationId !== operationId),
+      );
+    }
   }
 
   function moveSelectedNote(targetFolderPath: FolderScope): FolderWorkspaceMutation {
@@ -709,8 +735,10 @@ export function FolderNavigationWorkspace() {
       />
       <PathChangeQueue
         operations={pathChangeOperations}
-        onCompleteNextStep={completeNextPathChangeStep}
-        onFailNextStep={failNextPathChangeStep}
+        runningOperationIds={runningOperationIds}
+        onRunNextStep={(operationId) => {
+          void runNextPathChangeStep(operationId);
+        }}
         onRetryStep={retryPathChangeStep}
       />
     </section>

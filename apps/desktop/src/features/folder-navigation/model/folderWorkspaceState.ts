@@ -59,6 +59,11 @@ export type FolderWorkspacePathChangeOperation = {
   steps: readonly FolderWorkspaceOperationStep[];
 };
 
+export type FolderWorkspacePathChangeExecutor = {
+  moveMarkdownFiles: (pathChanges: readonly FolderWorkspacePathChange[]) => Promise<void>;
+  refreshIndexes: (indexRefresh: FolderWorkspaceIndexRefresh) => Promise<void>;
+};
+
 function isFolderPathWithin(folderPath: FolderPath, parentFolderPath: FolderPath): boolean {
   return folderPath === parentFolderPath || folderPath.startsWith(`${parentFolderPath}/`);
 }
@@ -270,6 +275,37 @@ export function retryOperationStep(
   });
 }
 
+export async function runNextOperationStep(
+  operation: FolderWorkspacePathChangeOperation,
+  executor: FolderWorkspacePathChangeExecutor,
+): Promise<FolderWorkspacePathChangeOperation> {
+  const nextStep = getNextPendingOperationStep(operation);
+
+  if (nextStep === null) {
+    return operation;
+  }
+
+  try {
+    if (nextStep.id === "file-move") {
+      await executor.moveMarkdownFiles(operation.pathChanges);
+    } else {
+      await executor.refreshIndexes({
+        noteIds: operation.affectedNoteIds,
+        reason: operation.reason,
+      });
+    }
+
+    return updateOperationStep(operation, nextStep.id, {
+      status: "completed",
+    });
+  } catch (error) {
+    return updateOperationStep(operation, nextStep.id, {
+      errorMessage: getOperationErrorMessage(error),
+      status: "failed",
+    });
+  }
+}
+
 export function isDescendantFolderPath(
   folderPath: FolderPath,
   parentFolderPath: FolderPath,
@@ -420,4 +456,8 @@ function updateOperationStep(
           };
     }),
   };
+}
+
+function getOperationErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The local path change step failed.";
 }
