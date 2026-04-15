@@ -123,6 +123,20 @@ fn resolve_markdown_path(workspace_root: &Path, path: &str) -> Result<PathBuf, C
 }
 
 fn validate_markdown_path(path: &str) -> Result<(), CommandError> {
+    if has_windows_drive_prefix(path) {
+        return Err(CommandError::new(
+            "invalid_markdown_path",
+            "Markdown file paths must not include a drive prefix.",
+        ));
+    }
+
+    if path.contains('\\') {
+        return Err(CommandError::new(
+            "invalid_markdown_path",
+            "Markdown file paths must use workspace separators.",
+        ));
+    }
+
     let markdown_path = Path::new(path);
 
     if markdown_path.components().next().is_none() {
@@ -153,6 +167,12 @@ fn validate_markdown_path(path: &str) -> Result<(), CommandError> {
     }
 
     Ok(())
+}
+
+fn has_windows_drive_prefix(path: &str) -> bool {
+    let path_bytes = path.as_bytes();
+
+    path_bytes.len() >= 2 && path_bytes[0].is_ascii_alphabetic() && path_bytes[1] == b':'
 }
 
 async fn move_file_without_overwrite(previous_path: &Path, next_path: &Path) -> anyhow::Result<()> {
@@ -223,6 +243,20 @@ mod tests {
     #[test]
     fn rejects_paths_that_escape_the_workspace() {
         let error = validate_markdown_path("../Plan.md").unwrap_err();
+
+        assert_eq!(error.code, "invalid_markdown_path");
+    }
+
+    #[test]
+    fn rejects_paths_with_drive_prefixes() {
+        let error = validate_markdown_path("C:/Projects/Grove/Plan.md").unwrap_err();
+
+        assert_eq!(error.code, "invalid_markdown_path");
+    }
+
+    #[test]
+    fn rejects_paths_with_backslashes() {
+        let error = validate_markdown_path("Projects\\Grove\\Plan.md").unwrap_err();
 
         assert_eq!(error.code, "invalid_markdown_path");
     }
