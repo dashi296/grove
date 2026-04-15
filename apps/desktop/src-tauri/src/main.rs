@@ -221,7 +221,7 @@ async fn scan_markdown_files(workspace_root: &Path) -> anyhow::Result<Vec<Scanne
 
             let relative_path = get_workspace_relative_markdown_path(workspace_root, &path)?;
             let metadata = entry.metadata().await?;
-            let updated_at_unix_ms = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_millis();
+            let updated_at_unix_ms = system_time_to_unix_ms(metadata.modified()?);
             let title = read_note_title(&path).await?;
 
             notes.push(ScannedMarkdownNote {
@@ -270,6 +270,11 @@ fn is_markdown_path(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+}
+
+fn system_time_to_unix_ms(time: SystemTime) -> u128 {
+    time.duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis())
 }
 
 async fn read_note_title(path: &Path) -> anyhow::Result<String> {
@@ -325,7 +330,11 @@ fn strip_closing_heading_marker(title: &str) -> &str {
         return trimmed_title;
     }
 
-    if without_hashes.chars().next_back().is_some_and(char::is_whitespace) {
+    if without_hashes
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
+    {
         return without_hashes.trim_end();
     }
 
@@ -391,12 +400,13 @@ async fn append_index_refresh_sidecar_entry(
 mod tests {
     use std::{
         path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use super::{
         find_first_markdown_heading, get_workspace_relative_markdown_path,
-        move_file_without_overwrite, scan_markdown_files, validate_markdown_path,
+        move_file_without_overwrite, scan_markdown_files, system_time_to_unix_ms,
+        validate_markdown_path,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -495,6 +505,13 @@ mod tests {
         let title = find_first_markdown_heading("# C#").expect("heading should be found");
 
         assert_eq!(title, "C#");
+    }
+
+    #[test]
+    fn clamps_pre_epoch_scan_timestamps_to_zero() {
+        let updated_at_unix_ms = system_time_to_unix_ms(UNIX_EPOCH - Duration::from_millis(1));
+
+        assert_eq!(updated_at_unix_ms, 0);
     }
 
     #[test]

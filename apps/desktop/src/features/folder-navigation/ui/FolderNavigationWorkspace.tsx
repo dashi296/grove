@@ -209,6 +209,33 @@ function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
   return null;
 }
 
+type EmptyNoteListProps = {
+  selectedFolderPath: FolderScope;
+  scanState: WorkspaceScanState;
+};
+
+function EmptyNoteList({ selectedFolderPath, scanState }: EmptyNoteListProps) {
+  if (scanState.status === "loading") {
+    return null;
+  }
+
+  if (scanState.status === "failed") {
+    return (
+      <div className="folder-navigation__empty">
+        <h3 className="folder-navigation__note-title">No notes loaded</h3>
+        <p className="folder-navigation__muted">Fix the scan error and reopen this workspace.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="folder-navigation__empty">
+      <h3 className="folder-navigation__note-title">No notes here yet</h3>
+      <p className="folder-navigation__muted">Start in {getFolderLabel(selectedFolderPath)}.</p>
+    </div>
+  );
+}
+
 function FolderNode({
   node,
   selectedFolderPath,
@@ -343,10 +370,7 @@ function NoteList({
           ))}
         </ol>
       ) : (
-        <div className="folder-navigation__empty">
-          <h3 className="folder-navigation__note-title">No notes here yet</h3>
-          <p className="folder-navigation__muted">Start in {getFolderLabel(selectedFolderPath)}.</p>
-        </div>
+        <EmptyNoteList selectedFolderPath={selectedFolderPath} scanState={scanState} />
       )}
     </section>
   );
