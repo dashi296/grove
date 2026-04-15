@@ -34,11 +34,24 @@ export type FolderWorkspaceIndexRefresh = {
 
 type FolderWorkspaceIndexRefreshReason = FolderWorkspaceIndexRefresh["reason"];
 
+export type FolderWorkspaceOperationStep = {
+  id: "file-move" | "index-refresh";
+  status: "pending";
+};
+
 export type FolderWorkspaceMutation = {
   state: FolderWorkspaceState;
   pathChanges: readonly FolderWorkspacePathChange[];
   affectedNoteIds: readonly string[];
   indexRefresh: FolderWorkspaceIndexRefresh;
+};
+
+export type FolderWorkspacePathChangeOperation = {
+  id: string;
+  reason: FolderWorkspaceIndexRefreshReason;
+  pathChanges: readonly FolderWorkspacePathChange[];
+  affectedNoteIds: readonly string[];
+  steps: readonly FolderWorkspaceOperationStep[];
 };
 
 function isFolderPathWithin(folderPath: FolderPath, parentFolderPath: FolderPath): boolean {
@@ -110,6 +123,32 @@ function createWorkspaceMutation(
     },
     pathChanges,
     state,
+  };
+}
+
+export function createPathChangeOperation(
+  id: string,
+  mutation: FolderWorkspaceMutation,
+): FolderWorkspacePathChangeOperation | null {
+  if (mutation.pathChanges.length === 0) {
+    return null;
+  }
+
+  return {
+    id,
+    affectedNoteIds: mutation.affectedNoteIds,
+    pathChanges: mutation.pathChanges,
+    reason: mutation.indexRefresh.reason,
+    steps: [
+      {
+        id: "file-move",
+        status: "pending",
+      },
+      {
+        id: "index-refresh",
+        status: "pending",
+      },
+    ],
   };
 }
 
