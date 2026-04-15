@@ -13,6 +13,7 @@ import {
   reconcileFolderWorkspaceState,
   renameFolderInWorkspace,
   retryOperationStep,
+  runNextOperationStep,
 } from "./folderWorkspaceState";
 
 const workspaceState: FolderWorkspaceState = {
@@ -229,6 +230,73 @@ describe("path change operation steps", () => {
       id: "file-move",
       status: "pending",
     });
+  });
+
+  it("runs file move and index refresh steps through the executor", async () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const operation = createPathChangeOperation("operation-1", mutation);
+    const executedSteps: string[] = [];
+
+    if (operation === null) {
+      throw new Error("Expected path change operation.");
+    }
+
+    const afterFileMove = await runNextOperationStep(operation, {
+      async moveMarkdownFiles(pathChanges) {
+        executedSteps.push(`file:${pathChanges.length}`);
+      },
+      async refreshIndexes(indexRefresh) {
+        executedSteps.push(`index:${indexRefresh.noteIds.length}`);
+      },
+    });
+    const afterIndexRefresh = await runNextOperationStep(afterFileMove, {
+      async moveMarkdownFiles(pathChanges) {
+        executedSteps.push(`file:${pathChanges.length}`);
+      },
+      async refreshIndexes(indexRefresh) {
+        executedSteps.push(`index:${indexRefresh.noteIds.length}`);
+      },
+    });
+
+    expect(executedSteps).toStrictEqual(["file:1", "index:1"]);
+    expect(afterFileMove.steps[0]).toStrictEqual({
+      id: "file-move",
+      status: "completed",
+    });
+    expect(isPathChangeOperationComplete(afterIndexRefresh)).toBe(true);
+  });
+
+  it("marks the active step failed when executor work rejects", async () => {
+    const mutation = moveNoteInFolderWorkspace(
+      workspaceState,
+      "note-plan",
+      normalizeFolderPath("Reading"),
+    );
+    const operation = createPathChangeOperation("operation-1", mutation);
+
+    if (operation === null) {
+      throw new Error("Expected path change operation.");
+    }
+
+    const failedOperation = await runNextOperationStep(operation, {
+      async moveMarkdownFiles() {
+        throw new Error("The target Markdown file already exists.");
+      },
+      async refreshIndexes() {
+        throw new Error("Index refresh should not run.");
+      },
+    });
+
+    expect(failedOperation.steps[0]).toStrictEqual({
+      id: "file-move",
+      errorMessage: "The target Markdown file already exists.",
+      status: "failed",
+    });
+    expect(getNextPendingOperationStep(failedOperation)).toBe(null);
   });
 });
 
