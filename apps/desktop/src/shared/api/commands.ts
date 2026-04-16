@@ -8,7 +8,7 @@ export type MoveMarkdownFileCommand = {
 
 export type RefreshNoteIndexesCommand = {
   noteIds: readonly string[];
-  reason: "note-move" | "folder-rename" | "note-save";
+  reason: "note-move" | "folder-rename" | "note-save" | "note-create";
 };
 
 export type ScannedMarkdownNote = {

@@ -50,6 +50,7 @@ enum IndexRefreshReason {
     NoteMove,
     FolderRename,
     NoteSave,
+    NoteCreate,
 }
 
 #[derive(Debug, Serialize)]

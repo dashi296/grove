@@ -258,6 +258,10 @@ function getNoteCreateErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be created.";
 }
 
+function getNoteIndexRefreshErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The note indexes could not be refreshed.";
+}
+
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
@@ -1002,6 +1006,17 @@ export function FolderNavigationWorkspace() {
         errorMessage: null,
       });
       setEditorNotice(null);
+
+      try {
+        await refreshNoteIndexes({
+          noteIds: [mappedNote.id],
+          reason: "note-create",
+        });
+      } catch (error) {
+        setEditorNotice(
+          `Created, but index refresh failed: ${getNoteIndexRefreshErrorMessage(error)}`,
+        );
+      }
     } catch (error) {
       setCreateState({
         status: "failed",
