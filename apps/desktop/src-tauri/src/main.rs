@@ -32,6 +32,13 @@ struct ReadMarkdownNoteRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CreateMarkdownNoteRequest {
+    path: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WriteMarkdownNoteRequest {
     path: String,
     content: String,
@@ -148,6 +155,23 @@ async fn read_markdown_note(
 }
 
 #[tauri::command]
+async fn create_markdown_note(
+    app_handle: tauri::AppHandle,
+    note: CreateMarkdownNoteRequest,
+) -> Result<ScannedMarkdownNote, CommandError> {
+    let workspace_root = default_workspace_root(&app_handle)?;
+    let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
+
+    create_markdown_file(&note_path, note.content.as_bytes())
+        .await
+        .map_err(|error| CommandError::new("note_create_failed", error.to_string()))?;
+
+    summarize_markdown_file(&workspace_root, &note_path)
+        .await
+        .map_err(|error| CommandError::new("note_create_failed", error.to_string()))
+}
+
+#[tauri::command]
 async fn write_markdown_note(
     app_handle: tauri::AppHandle,
     note: WriteMarkdownNoteRequest,
@@ -167,6 +191,7 @@ async fn write_markdown_note(
 fn main() {
     if let Err(error) = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            create_markdown_note,
             move_markdown_file,
             read_markdown_note,
             refresh_note_indexes,
@@ -358,6 +383,14 @@ async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> 
     write_result
 }
 
+async fn create_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> {
+    if tokio::fs::try_exists(path).await? {
+        anyhow::bail!("The target Markdown file already exists: {}", path.display());
+    }
+
+    write_markdown_file(path, content).await
+}
+
 fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
     let file_name = path
         .file_name()
@@ -546,6 +579,7 @@ mod tests {
         find_first_markdown_heading, get_temporary_write_path,
         get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
         scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        create_markdown_file,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -711,6 +745,40 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("Markdown write should succeed");
+    }
+
+    #[test]
+    fn creates_new_markdown_files_without_overwriting_existing_paths() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("creates-new-markdown-files");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+
+            create_markdown_file(&note_path, b"").await?;
+
+            assert_eq!(tokio::fs::read_to_string(&note_path).await?, "");
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("Markdown create should succeed");
+    }
+
+    #[test]
+    fn rejects_new_markdown_files_when_the_target_exists() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("rejects-existing-create-target");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+            tokio::fs::create_dir_all(note_path.parent().expect("note parent")).await?;
+            tokio::fs::write(&note_path, "# Plan").await?;
+
+            let error = create_markdown_file(&note_path, b"")
+                .await
+                .expect_err("existing create target should be rejected");
+
+            assert!(error.to_string().contains("already exists"));
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("Markdown create collision test should run");
     }
 
     #[test]

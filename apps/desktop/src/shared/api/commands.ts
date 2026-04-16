@@ -17,6 +17,11 @@ export type ScannedMarkdownNote = {
   updatedAtUnixMs: number;
 };
 
+export type CreateMarkdownNoteCommand = {
+  path: string;
+  content: string;
+};
+
 export type ReadMarkdownNoteCommand = {
   path: string;
 };
@@ -39,6 +44,18 @@ export async function scanMarkdownWorkspace(): Promise<ScannedMarkdownNote[]> {
 
   if (!isScannedMarkdownNotes(result)) {
     throw new Error("The desktop scan command returned an invalid note list.");
+  }
+
+  return result;
+}
+
+export async function createMarkdownNote(
+  command: CreateMarkdownNoteCommand,
+): Promise<ScannedMarkdownNote> {
+  const result = await invokeCommandResult("create_markdown_note", { note: command });
+
+  if (!isScannedMarkdownNote(result)) {
+    throw new Error("The desktop create command returned invalid note metadata.");
   }
 
   return result;
