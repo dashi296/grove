@@ -40,7 +40,10 @@ import {
   updateNoteEditBufferPath,
   updateNoteEditDraft,
 } from "../model/noteEditBuffer";
-import { applySavedNoteMetadataToWorkspaceState } from "../model/noteSave";
+import {
+  applySavedNoteMetadataToWorkspaceState,
+  isNoteSaveBlockedByPathChange,
+} from "../model/noteSave";
 import { usePathChangeQueue } from "../model/usePathChangeQueue";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
 import type {
@@ -99,6 +102,7 @@ type ActivePaneProps = {
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onEditContent: (content: string) => void;
   onSaveDraft: () => void;
+  saveBlockedReason: string | null;
   onDiscardDraft: () => void;
 };
 
@@ -139,6 +143,7 @@ type NoteEditorProps = {
   editorNotice: string | null;
   onEditContent: (content: string) => void;
   onSaveDraft: () => void;
+  saveBlockedReason: string | null;
   onDiscardDraft: () => void;
 };
 
@@ -531,6 +536,7 @@ function NoteEditor({
   editorNotice,
   onEditContent,
   onSaveDraft,
+  saveBlockedReason,
   onDiscardDraft,
 }: NoteEditorProps) {
   if (selectedNote === undefined) {
@@ -557,7 +563,7 @@ function NoteEditor({
           type="button"
           className="folder-navigation__action"
           onClick={onSaveDraft}
-          disabled={noteEditBuffer.status !== "dirty"}
+          disabled={noteEditBuffer.status !== "dirty" || saveBlockedReason !== null}
         >
           Save
         </button>
@@ -575,6 +581,9 @@ function NoteEditor({
       )}
       {editorNotice === null ? null : (
         <p className="folder-navigation__step-error">{editorNotice}</p>
+      )}
+      {saveBlockedReason === null ? null : (
+        <p className="folder-navigation__step-error">{saveBlockedReason}</p>
       )}
       <textarea
         className="folder-navigation__textarea"
@@ -599,6 +608,7 @@ function ActivePane({
   onRenameSelectedFolder,
   onEditContent,
   onSaveDraft,
+  saveBlockedReason,
   onDiscardDraft,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
@@ -623,6 +633,7 @@ function ActivePane({
               editorNotice={editorNotice}
               onEditContent={onEditContent}
               onSaveDraft={onSaveDraft}
+              saveBlockedReason={saveBlockedReason}
               onDiscardDraft={onDiscardDraft}
             />
             <MoveNoteControl
@@ -786,6 +797,11 @@ export function FolderNavigationWorkspace() {
   const selectedNote = useMemo(() => {
     return notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   }, [notes, selectedNoteId]);
+  const saveBlockedReason =
+    !canSaveNoteEditBuffer(noteEditBuffer) ||
+    !isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)
+      ? null
+      : "Wait for this note's path change to finish before saving.";
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
     setWorkspaceState(reconcileFolderWorkspaceState(nextState));
@@ -903,6 +919,11 @@ export function FolderNavigationWorkspace() {
       return;
     }
 
+    if (isNoteSaveBlockedByPathChange(pathChangeOperations, buffer.noteId)) {
+      setEditorNotice("Wait for this note's path change to finish before saving.");
+      return;
+    }
+
     savingNoteIdSet.current.add(buffer.noteId);
     setNoteEditBuffer((currentBuffer) => {
       if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
@@ -942,7 +963,7 @@ export function FolderNavigationWorkspace() {
     } finally {
       savingNoteIdSet.current.delete(buffer.noteId);
     }
-  }, [noteEditBuffer]);
+  }, [noteEditBuffer, pathChangeOperations]);
 
   function discardSelectedDraft(): void {
     setNoteEditBuffer((currentBuffer) => {
@@ -1072,6 +1093,12 @@ export function FolderNavigationWorkspace() {
         return;
       }
 
+      if (isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)) {
+        event.preventDefault();
+        setEditorNotice("Wait for this note's path change to finish before saving.");
+        return;
+      }
+
       event.preventDefault();
       void saveSelectedNoteDraft();
     }
@@ -1081,7 +1108,7 @@ export function FolderNavigationWorkspace() {
     return () => {
       window.removeEventListener("keydown", saveOnKeyboardShortcut);
     };
-  }, [noteEditBuffer, saveSelectedNoteDraft]);
+  }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
 
   return (
     <section className="folder-navigation">
@@ -1114,6 +1141,7 @@ export function FolderNavigationWorkspace() {
         onSaveDraft={() => {
           void saveSelectedNoteDraft();
         }}
+        saveBlockedReason={saveBlockedReason}
         onDiscardDraft={discardSelectedDraft}
       />
       <PathChangeQueue

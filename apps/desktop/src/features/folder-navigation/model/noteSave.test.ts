@@ -1,8 +1,11 @@
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import { describe, expect, it } from "vitest";
 
-import type { FolderWorkspaceState } from "./folderWorkspaceState";
-import { applySavedNoteMetadataToWorkspaceState } from "./noteSave";
+import type {
+  FolderWorkspacePathChangeOperation,
+  FolderWorkspaceState,
+} from "./folderWorkspaceState";
+import { applySavedNoteMetadataToWorkspaceState, isNoteSaveBlockedByPathChange } from "./noteSave";
 
 const workspaceState: FolderWorkspaceState = {
   notes: [
@@ -72,5 +75,47 @@ describe("applySavedNoteMetadataToWorkspaceState", () => {
       path: "Projects/Grove/Moved.md",
       title: "Updated plan",
     });
+  });
+});
+
+describe("isNoteSaveBlockedByPathChange", () => {
+  const pendingOperation: FolderWorkspacePathChangeOperation = {
+    id: "path-change-1",
+    affectedNoteIds: ["note-plan"],
+    pathChanges: [
+      {
+        noteId: "note-plan",
+        previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+        nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+      },
+    ],
+    reason: "note-move",
+    steps: [
+      {
+        id: "file-move",
+        status: "pending",
+      },
+      {
+        id: "index-refresh",
+        status: "pending",
+      },
+    ],
+  };
+
+  it("blocks saves while the note has unfinished path changes", () => {
+    expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-plan")).toBe(true);
+  });
+
+  it("allows saves for unrelated notes and completed path changes", () => {
+    const completedOperation: FolderWorkspacePathChangeOperation = {
+      ...pendingOperation,
+      steps: pendingOperation.steps.map((step) => ({
+        ...step,
+        status: "completed",
+      })),
+    };
+
+    expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-research")).toBe(false);
+    expect(isNoteSaveBlockedByPathChange([completedOperation], "note-plan")).toBe(false);
   });
 });

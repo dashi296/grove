@@ -1,7 +1,12 @@
 import type { NoteFilePath } from "@grove/core";
 import type { ScannedMarkdownNote } from "../../../shared";
 
-import { reconcileFolderWorkspaceState, type FolderWorkspaceState } from "./folderWorkspaceState";
+import {
+  isPathChangeOperationComplete,
+  reconcileFolderWorkspaceState,
+  type FolderWorkspacePathChangeOperation,
+  type FolderWorkspaceState,
+} from "./folderWorkspaceState";
 import { mapScannedMarkdownNotes } from "./workspaceScan";
 
 export type SavedNoteMetadataChange = {
@@ -30,5 +35,14 @@ export function applySavedNoteMetadataToWorkspaceState(
         path: note.path === previousPath ? updatedNote.path : note.path,
       };
     }),
+  });
+}
+
+export function isNoteSaveBlockedByPathChange(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  noteId: string,
+): boolean {
+  return operations.some((operation) => {
+    return !isPathChangeOperationComplete(operation) && operation.affectedNoteIds.includes(noteId);
   });
 }
