@@ -15,6 +15,19 @@ import {
 
 const notePath = normalizeNoteFilePath("Projects/Plan.md");
 
+function createDirtyBuffer() {
+  const buffer = updateNoteEditDraft(
+    createCleanNoteEditBuffer("note-plan", notePath, "# Plan"),
+    "# Plan\n\nNext",
+  );
+
+  if (!canSaveNoteEditBuffer(buffer)) {
+    throw new Error("Expected a dirty edit buffer.");
+  }
+
+  return buffer;
+}
+
 describe("note edit buffer", () => {
   it("creates a clean buffer from loaded Markdown content", () => {
     const buffer = createCleanNoteEditBuffer("note-plan", notePath, "# Plan");
@@ -46,7 +59,7 @@ describe("note edit buffer", () => {
 
   it("only allows dirty buffers to be saved", () => {
     const cleanBuffer = createCleanNoteEditBuffer("note-plan", notePath, "# Plan");
-    const dirtyBuffer = updateNoteEditDraft(cleanBuffer, "# Plan\n\nNext");
+    const dirtyBuffer = createDirtyBuffer();
     const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
     const erroredBuffer = createErroredNoteEditBuffer("note-plan", notePath, "Disk read failed.");
 
@@ -59,7 +72,7 @@ describe("note edit buffer", () => {
 
   it("blocks workspace changes only while dirty or saving", () => {
     const cleanBuffer = createCleanNoteEditBuffer("note-plan", notePath, "# Plan");
-    const dirtyBuffer = updateNoteEditDraft(cleanBuffer, "# Plan\n\nNext");
+    const dirtyBuffer = createDirtyBuffer();
     const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
     const erroredBuffer = createErroredNoteEditBuffer("note-plan", notePath, "Disk read failed.");
 
@@ -71,10 +84,7 @@ describe("note edit buffer", () => {
   });
 
   it("keeps a failed save dirty without discarding the draft", () => {
-    const dirtyBuffer = updateNoteEditDraft(
-      createCleanNoteEditBuffer("note-plan", notePath, "# Plan"),
-      "# Plan\n\nNext",
-    );
+    const dirtyBuffer = createDirtyBuffer();
     const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
     const erroredBuffer = markNoteEditBufferSaveFailed(savingBuffer, "Disk write failed.");
 
@@ -101,9 +111,16 @@ describe("note edit buffer", () => {
   });
 
   it("keeps newer edits dirty when an earlier save completes", () => {
-    const savingBuffer = markNoteEditBufferSaving(
-      updateNoteEditDraft(createCleanNoteEditBuffer("note-plan", notePath, "# Plan"), "# Saved"),
+    const dirtyBuffer = updateNoteEditDraft(
+      createCleanNoteEditBuffer("note-plan", notePath, "# Plan"),
+      "# Saved",
     );
+
+    if (!canSaveNoteEditBuffer(dirtyBuffer)) {
+      throw new Error("Expected a dirty edit buffer.");
+    }
+
+    const savingBuffer = markNoteEditBufferSaving(dirtyBuffer);
     const editedAgainBuffer = updateNoteEditDraft(savingBuffer, "# Saved\n\nMore");
 
     expect(markNoteEditBufferSaved(editedAgainBuffer, "# Saved")).toMatchObject({

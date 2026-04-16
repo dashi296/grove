@@ -18,7 +18,6 @@ import {
   scanMarkdownWorkspace,
   writeMarkdownNote,
 } from "../../../shared";
-import type { ScannedMarkdownNote } from "../../../shared";
 import {
   getFailedOperationSteps,
   getNextPendingOperationStep,
@@ -40,6 +39,7 @@ import {
   markNoteEditBufferSaving,
   updateNoteEditDraft,
 } from "../model/noteEditBuffer";
+import { applySavedNoteMetadataToWorkspaceState } from "../model/noteSave";
 import { usePathChangeQueue } from "../model/usePathChangeQueue";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
 import type {
@@ -875,28 +875,6 @@ export function FolderNavigationWorkspace() {
     setEditorNotice(null);
   }
 
-  function applySavedNoteMetadata(buffer: NoteEditBuffer, savedNote: ScannedMarkdownNote): void {
-    const [updatedNote] = mapScannedMarkdownNotes([savedNote]);
-
-    setWorkspaceState((currentState) =>
-      reconcileFolderWorkspaceState({
-        ...currentState,
-        notes: currentState.notes.map((note) => {
-          if (note.id !== buffer.noteId) {
-            return note;
-          }
-
-          return {
-            ...note,
-            ...updatedNote,
-            id: buffer.noteId,
-            path: note.path === buffer.path ? updatedNote.path : note.path,
-          };
-        }),
-      }),
-    );
-  }
-
   function markSelectedNoteDraftSaved(buffer: NoteEditBuffer): void {
     setNoteEditBuffer((currentBuffer) => {
       if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
@@ -925,7 +903,15 @@ export function FolderNavigationWorkspace() {
     }
 
     savingNoteIdSet.current.add(buffer.noteId);
-    setNoteEditBuffer(markNoteEditBufferSaving(buffer));
+    setNoteEditBuffer((currentBuffer) => {
+      if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
+        return currentBuffer;
+      }
+
+      return canSaveNoteEditBuffer(currentBuffer)
+        ? markNoteEditBufferSaving(currentBuffer)
+        : currentBuffer;
+    });
     setEditorNotice(null);
 
     try {
@@ -933,7 +919,13 @@ export function FolderNavigationWorkspace() {
         path: buffer.path,
         content: buffer.draftContent,
       });
-      applySavedNoteMetadata(buffer, savedNote);
+      setWorkspaceState((currentState) =>
+        applySavedNoteMetadataToWorkspaceState(currentState, {
+          noteId: buffer.noteId,
+          previousPath: buffer.path,
+          savedNote,
+        }),
+      );
       markSelectedNoteDraftSaved(buffer);
 
       try {

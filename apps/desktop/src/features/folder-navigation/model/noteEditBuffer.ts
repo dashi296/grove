@@ -54,7 +54,7 @@ export function updateNoteEditDraft(buffer: NoteEditBuffer, draftContent: string
   };
 }
 
-export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer {
+export function markNoteEditBufferSaving(buffer: DirtyNoteEditBuffer): NoteEditBuffer {
   return {
     ...buffer,
     status: "saving",
