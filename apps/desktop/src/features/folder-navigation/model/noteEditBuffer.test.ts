@@ -10,6 +10,7 @@ import {
   markNoteEditBufferSaved,
   markNoteEditBufferSaveFailed,
   markNoteEditBufferSaving,
+  updateNoteEditBufferPath,
   updateNoteEditDraft,
 } from "./noteEditBuffer";
 
@@ -55,6 +56,19 @@ describe("note edit buffer", () => {
     );
 
     expect(updateNoteEditDraft(buffer, "# Plan").status).toBe("clean");
+  });
+
+  it("updates the backing Markdown path without changing loaded content or draft state", () => {
+    const buffer = createDirtyBuffer();
+
+    expect(
+      updateNoteEditBufferPath(buffer, normalizeNoteFilePath("Projects/Moved.md")),
+    ).toMatchObject({
+      path: "Projects/Moved.md",
+      baseContent: "# Plan",
+      draftContent: "# Plan\n\nNext",
+      status: "dirty",
+    });
   });
 
   it("only allows dirty buffers to be saved", () => {

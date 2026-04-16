@@ -37,6 +37,7 @@ import {
   markNoteEditBufferSaved,
   markNoteEditBufferSaveFailed,
   markNoteEditBufferSaving,
+  updateNoteEditBufferPath,
   updateNoteEditDraft,
 } from "../model/noteEditBuffer";
 import { applySavedNoteMetadataToWorkspaceState } from "../model/noteSave";
@@ -1004,12 +1005,9 @@ export function FolderNavigationWorkspace() {
       return;
     }
 
-    if (noteEditBuffer?.noteId === selectedNote.id && noteEditBuffer.status === "dirty") {
+    if (noteEditBuffer?.noteId === selectedNote.id && noteEditBuffer.status !== "error") {
       if (noteEditBuffer.path !== selectedNote.path) {
-        setNoteEditBuffer({
-          ...noteEditBuffer,
-          path: selectedNote.path,
-        });
+        setNoteEditBuffer(updateNoteEditBufferPath(noteEditBuffer, selectedNote.path));
       }
       setEditorLoadState({ status: "idle" });
       return;

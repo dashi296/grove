@@ -54,6 +54,16 @@ export function updateNoteEditDraft(buffer: NoteEditBuffer, draftContent: string
   };
 }
 
+export function updateNoteEditBufferPath(
+  buffer: NoteEditBuffer,
+  path: NoteFilePath,
+): NoteEditBuffer {
+  return {
+    ...buffer,
+    path,
+  };
+}
+
 export function markNoteEditBufferSaving(buffer: DirtyNoteEditBuffer): NoteEditBuffer {
   return {
     ...buffer,
