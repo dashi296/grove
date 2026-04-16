@@ -8,13 +8,18 @@ export type MoveMarkdownFileCommand = {
 
 export type RefreshNoteIndexesCommand = {
   noteIds: readonly string[];
-  reason: "note-move" | "folder-rename" | "note-save";
+  reason: "note-move" | "folder-rename" | "note-save" | "note-create";
 };
 
 export type ScannedMarkdownNote = {
   path: string;
   title: string;
   updatedAtUnixMs: number;
+};
+
+export type CreateMarkdownNoteCommand = {
+  path: string;
+  content: string;
 };
 
 export type ReadMarkdownNoteCommand = {
@@ -39,6 +44,18 @@ export async function scanMarkdownWorkspace(): Promise<ScannedMarkdownNote[]> {
 
   if (!isScannedMarkdownNotes(result)) {
     throw new Error("The desktop scan command returned an invalid note list.");
+  }
+
+  return result;
+}
+
+export async function createMarkdownNote(
+  command: CreateMarkdownNoteCommand,
+): Promise<ScannedMarkdownNote> {
+  const result = await invokeCommandResult("create_markdown_note", { note: command });
+
+  if (!isScannedMarkdownNote(result)) {
+    throw new Error("The desktop create command returned invalid note metadata.");
   }
 
   return result;

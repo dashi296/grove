@@ -1,4 +1,5 @@
 export {
+  createMarkdownNote,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -6,6 +7,7 @@ export {
   writeMarkdownNote,
 } from "./api/commands";
 export type {
+  CreateMarkdownNoteCommand,
   MoveMarkdownFileCommand,
   ReadMarkdownNoteCommand,
   RefreshNoteIndexesCommand,

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createMarkdownNote,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -71,6 +72,31 @@ describe("desktop command wrappers", () => {
       },
     ]);
     expect(invokeMock).toHaveBeenCalledWith("scan_markdown_workspace", {});
+  });
+
+  it("invokes the Markdown note create command", async () => {
+    invokeMock.mockResolvedValue({
+      path: "Projects/Grove/Plan.md",
+      title: "Plan",
+      updatedAtUnixMs: 1776265200000,
+    });
+
+    await expect(
+      createMarkdownNote({
+        path: "Projects/Grove/Plan.md",
+        content: "",
+      }),
+    ).resolves.toStrictEqual({
+      path: "Projects/Grove/Plan.md",
+      title: "Plan",
+      updatedAtUnixMs: 1776265200000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("create_markdown_note", {
+      note: {
+        path: "Projects/Grove/Plan.md",
+        content: "",
+      },
+    });
   });
 
   it("invokes the Markdown note read command", async () => {
@@ -161,5 +187,16 @@ describe("desktop command wrappers", () => {
         nextPath: "Reading/Plan.md",
       }),
     ).rejects.toThrow("The target Markdown file already exists.");
+  });
+
+  it("rejects invalid Markdown note create metadata", async () => {
+    invokeMock.mockResolvedValue({ path: "Projects/Grove/Plan.md", title: "Plan" });
+
+    await expect(
+      createMarkdownNote({
+        path: "Projects/Grove/Plan.md",
+        content: "",
+      }),
+    ).rejects.toThrow("invalid note metadata");
   });
 });
