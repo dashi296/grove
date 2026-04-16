@@ -43,6 +43,7 @@ import {
 import {
   applySavedNoteMetadataToWorkspaceState,
   isNoteSaveBlockedByPathChange,
+  isNoteSaveKeyboardShortcut,
 } from "../model/noteSave";
 import { usePathChangeQueue } from "../model/usePathChangeQueue";
 import { mapScannedMarkdownNotes } from "../model/workspaceScan";
@@ -241,6 +242,8 @@ function getNoteReadErrorMessage(error: unknown): string {
 function getNoteSaveErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be saved.";
 }
+
+const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
   if (scanState.status === "loading") {
@@ -801,7 +804,7 @@ export function FolderNavigationWorkspace() {
     !canSaveNoteEditBuffer(noteEditBuffer) ||
     !isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)
       ? null
-      : "Wait for this note's path change to finish before saving.";
+      : noteSaveBlockedMessage;
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
     setWorkspaceState(reconcileFolderWorkspaceState(nextState));
@@ -920,7 +923,7 @@ export function FolderNavigationWorkspace() {
     }
 
     if (isNoteSaveBlockedByPathChange(pathChangeOperations, buffer.noteId)) {
-      setEditorNotice("Wait for this note's path change to finish before saving.");
+      setEditorNotice(noteSaveBlockedMessage);
       return;
     }
 
@@ -1085,21 +1088,21 @@ export function FolderNavigationWorkspace() {
 
   useEffect(() => {
     function saveOnKeyboardShortcut(event: KeyboardEvent): void {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") {
+      if (!isNoteSaveKeyboardShortcut(event)) {
         return;
       }
+
+      event.preventDefault();
 
       if (!canSaveNoteEditBuffer(noteEditBuffer)) {
         return;
       }
 
       if (isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)) {
-        event.preventDefault();
-        setEditorNotice("Wait for this note's path change to finish before saving.");
+        setEditorNotice(noteSaveBlockedMessage);
         return;
       }
 
-      event.preventDefault();
       void saveSelectedNoteDraft();
     }
 

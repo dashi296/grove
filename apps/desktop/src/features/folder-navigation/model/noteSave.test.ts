@@ -5,7 +5,11 @@ import type {
   FolderWorkspacePathChangeOperation,
   FolderWorkspaceState,
 } from "./folderWorkspaceState";
-import { applySavedNoteMetadataToWorkspaceState, isNoteSaveBlockedByPathChange } from "./noteSave";
+import {
+  applySavedNoteMetadataToWorkspaceState,
+  isNoteSaveBlockedByPathChange,
+  isNoteSaveKeyboardShortcut,
+} from "./noteSave";
 
 const workspaceState: FolderWorkspaceState = {
   notes: [
@@ -117,5 +121,17 @@ describe("isNoteSaveBlockedByPathChange", () => {
 
     expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-research")).toBe(false);
     expect(isNoteSaveBlockedByPathChange([completedOperation], "note-plan")).toBe(false);
+  });
+});
+
+describe("isNoteSaveKeyboardShortcut", () => {
+  it("matches common save shortcuts", () => {
+    expect(isNoteSaveKeyboardShortcut({ ctrlKey: true, key: "s", metaKey: false })).toBe(true);
+    expect(isNoteSaveKeyboardShortcut({ ctrlKey: false, key: "S", metaKey: true })).toBe(true);
+  });
+
+  it("ignores unrelated key combinations", () => {
+    expect(isNoteSaveKeyboardShortcut({ ctrlKey: false, key: "s", metaKey: false })).toBe(false);
+    expect(isNoteSaveKeyboardShortcut({ ctrlKey: true, key: "p", metaKey: false })).toBe(false);
   });
 });
