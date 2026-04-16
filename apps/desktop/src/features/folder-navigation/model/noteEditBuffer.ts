@@ -11,6 +11,10 @@ export type NoteEditBuffer = {
   errorMessage: string | null;
 };
 
+type DirtyNoteEditBuffer = NoteEditBuffer & {
+  status: "dirty";
+};
+
 export function createCleanNoteEditBuffer(
   noteId: string,
   path: NoteFilePath,
@@ -50,7 +54,17 @@ export function updateNoteEditDraft(buffer: NoteEditBuffer, draftContent: string
   };
 }
 
-export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer {
+export function updateNoteEditBufferPath(
+  buffer: NoteEditBuffer,
+  path: NoteFilePath,
+): NoteEditBuffer {
+  return {
+    ...buffer,
+    path,
+  };
+}
+
+export function markNoteEditBufferSaving(buffer: DirtyNoteEditBuffer): NoteEditBuffer {
   return {
     ...buffer,
     status: "saving",
@@ -58,14 +72,38 @@ export function markNoteEditBufferSaving(buffer: NoteEditBuffer): NoteEditBuffer
   };
 }
 
-export function markNoteEditBufferError(
+export function canSaveNoteEditBuffer(
+  buffer: NoteEditBuffer | null,
+): buffer is DirtyNoteEditBuffer {
+  return buffer?.status === "dirty";
+}
+
+export function isNoteEditBufferBlockingWorkspaceChange(buffer: NoteEditBuffer | null): boolean {
+  return buffer?.status === "dirty" || buffer?.status === "saving";
+}
+
+export function markNoteEditBufferSaveFailed(
   buffer: NoteEditBuffer,
   errorMessage: string,
 ): NoteEditBuffer {
   return {
     ...buffer,
-    status: "error",
+    status: "dirty",
     errorMessage,
+  };
+}
+
+export function markNoteEditBufferSaved(
+  buffer: NoteEditBuffer,
+  savedContent: string,
+): NoteEditBuffer {
+  const status = buffer.draftContent === savedContent ? "clean" : "dirty";
+
+  return {
+    ...buffer,
+    baseContent: savedContent,
+    status,
+    errorMessage: null,
   };
 }
 

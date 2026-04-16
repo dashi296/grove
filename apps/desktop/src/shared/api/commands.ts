@@ -8,7 +8,7 @@ export type MoveMarkdownFileCommand = {
 
 export type RefreshNoteIndexesCommand = {
   noteIds: readonly string[];
-  reason: "note-move" | "folder-rename";
+  reason: "note-move" | "folder-rename" | "note-save";
 };
 
 export type ScannedMarkdownNote = {
@@ -19,6 +19,11 @@ export type ScannedMarkdownNote = {
 
 export type ReadMarkdownNoteCommand = {
   path: string;
+};
+
+export type WriteMarkdownNoteCommand = {
+  path: string;
+  content: string;
 };
 
 export async function moveMarkdownFile(command: MoveMarkdownFileCommand): Promise<void> {
@@ -44,6 +49,18 @@ export async function readMarkdownNote(command: ReadMarkdownNoteCommand): Promis
 
   if (typeof result !== "string") {
     throw new Error("The desktop read command returned invalid note content.");
+  }
+
+  return result;
+}
+
+export async function writeMarkdownNote(
+  command: WriteMarkdownNoteCommand,
+): Promise<ScannedMarkdownNote> {
+  const result = await invokeCommandResult("write_markdown_note", { note: command });
+
+  if (!isScannedMarkdownNote(result)) {
+    throw new Error("The desktop write command returned invalid note metadata.");
   }
 
   return result;
