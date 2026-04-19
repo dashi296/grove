@@ -7,6 +7,7 @@ import {
   completeNextOperationStep,
   createPathChangeOperation,
   deleteNoteFromFolderWorkspace,
+  deleteSelectedNoteFromFolderWorkspace,
   failNextOperationStep,
   getFailedOperationSteps,
   getNextPendingOperationStep,
@@ -167,6 +168,24 @@ describe("getNextSelectedNoteIdAfterDelete", () => {
     );
 
     expect(getNextSelectedNoteIdAfterDelete(onlyRootNote, "note-root", "note-root")).toBe("");
+  });
+});
+
+describe("deleteSelectedNoteFromFolderWorkspace", () => {
+  it("derives the next selection from the current workspace state", () => {
+    const result = deleteSelectedNoteFromFolderWorkspace(workspaceState, "note-plan", "note-plan");
+
+    expect(result.nextSelectedNoteId).toBe("note-research");
+    expect(result.mutation.state.notes.map((note) => note.id)).toStrictEqual([
+      "note-root",
+      "note-research",
+    ]);
+  });
+
+  it("clears a stale selection when deleting another note after selection changed", () => {
+    const result = deleteSelectedNoteFromFolderWorkspace(workspaceState, "note-root", "missing");
+
+    expect(result.nextSelectedNoteId).toBe("");
   });
 });
 

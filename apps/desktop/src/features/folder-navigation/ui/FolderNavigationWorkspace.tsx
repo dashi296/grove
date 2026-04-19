@@ -22,10 +22,9 @@ import {
   writeMarkdownNote,
 } from "../../../shared";
 import {
-  deleteNoteFromFolderWorkspace,
+  deleteSelectedNoteFromFolderWorkspace,
   getFailedOperationSteps,
   getNextPendingOperationStep,
-  getNextSelectedNoteIdAfterDelete,
   isDescendantFolderPath,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
@@ -1085,10 +1084,18 @@ export function FolderNavigationWorkspace() {
     try {
       await deleteMarkdownNote({ path: note.path });
 
-      const mutation = deleteNoteFromFolderWorkspace(workspaceState, note.id);
-      const nextSelectedNoteId = getNextSelectedNoteIdAfterDelete(notes, note.id, selectedNoteId);
+      let nextSelectedNoteId = "";
 
-      applyWorkspaceState(mutation.state);
+      setWorkspaceState((currentState) => {
+        const deleteMutation = deleteSelectedNoteFromFolderWorkspace(
+          currentState,
+          note.id,
+          selectedNoteId,
+        );
+
+        nextSelectedNoteId = deleteMutation.nextSelectedNoteId;
+        return deleteMutation.mutation.state;
+      });
       setSelectedNoteId(nextSelectedNoteId);
       setNoteEditBuffer((currentBuffer) => {
         if (currentBuffer?.noteId !== note.id) {
@@ -1118,7 +1125,7 @@ export function FolderNavigationWorkspace() {
         errorMessage: getNoteDeleteErrorMessage(error),
       });
     }
-  }, [deleteState.status, noteEditBuffer, notes, selectedNote, selectedNoteId, workspaceState]);
+  }, [deleteState.status, noteEditBuffer, selectedNote, selectedNoteId]);
 
   const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
     if (scanState.status !== "ready" || createState.status === "creating") {

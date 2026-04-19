@@ -51,6 +51,11 @@ export type FolderWorkspaceMutation = {
   indexRefresh: FolderWorkspaceIndexRefresh;
 };
 
+export type FolderWorkspaceDeleteMutation = {
+  mutation: FolderWorkspaceMutation;
+  nextSelectedNoteId: string;
+};
+
 export type FolderWorkspacePathChangeOperation = {
   id: string;
   reason: FolderWorkspaceIndexRefreshReason;
@@ -502,6 +507,17 @@ export function getNextSelectedNoteIdAfterDelete(
   return (
     remainingNotes[deletedIndex]?.id ?? remainingNotes[Math.max(0, deletedIndex - 1)]?.id ?? ""
   );
+}
+
+export function deleteSelectedNoteFromFolderWorkspace(
+  state: FolderWorkspaceState,
+  noteId: string,
+  selectedNoteId: string,
+): FolderWorkspaceDeleteMutation {
+  return {
+    mutation: deleteNoteFromFolderWorkspace(state, noteId),
+    nextSelectedNoteId: getNextSelectedNoteIdAfterDelete(state.notes, noteId, selectedNoteId),
+  };
 }
 
 function updateOperationStep(
