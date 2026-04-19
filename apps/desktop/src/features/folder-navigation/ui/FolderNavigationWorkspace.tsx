@@ -224,7 +224,14 @@ function getPathChangeSummary(pathChanges: readonly FolderWorkspacePathChange[])
 }
 
 function getOperationReasonLabel(reason: FolderWorkspacePathChangeOperation["reason"]): string {
-  return reason === "note-move" ? "Note move" : "Folder rename";
+  switch (reason) {
+    case "note-move":
+      return "Note move";
+    case "folder-rename":
+      return "Folder rename";
+    case "note-delete":
+      return "Note delete";
+  }
 }
 
 function getOperationStepLabel(stepId: FolderWorkspaceOperationStep["id"]): string {
