@@ -38,13 +38,20 @@ export function applySavedNoteMetadataToWorkspaceState(
   });
 }
 
-export function isNoteSaveBlockedByPathChange(
+export function isNoteAffectedByPathChange(
   operations: readonly FolderWorkspacePathChangeOperation[],
   noteId: string,
 ): boolean {
   return operations.some((operation) => {
     return !isPathChangeOperationComplete(operation) && operation.affectedNoteIds.includes(noteId);
   });
+}
+
+export function isNoteSaveBlockedByPathChange(
+  operations: readonly FolderWorkspacePathChangeOperation[],
+  noteId: string,
+): boolean {
+  return isNoteAffectedByPathChange(operations, noteId);
 }
 
 export function isNoteSaveKeyboardShortcut(

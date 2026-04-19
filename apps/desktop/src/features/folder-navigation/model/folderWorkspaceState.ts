@@ -29,7 +29,7 @@ export type FolderWorkspacePathChange = {
 
 export type FolderWorkspaceIndexRefresh = {
   noteIds: readonly string[];
-  reason: "note-move" | "folder-rename";
+  reason: "note-move" | "folder-rename" | "note-delete";
 };
 
 type FolderWorkspaceIndexRefreshReason = FolderWorkspaceIndexRefresh["reason"];
@@ -49,6 +49,11 @@ export type FolderWorkspaceMutation = {
   pathChanges: readonly FolderWorkspacePathChange[];
   affectedNoteIds: readonly string[];
   indexRefresh: FolderWorkspaceIndexRefresh;
+};
+
+export type FolderWorkspaceDeleteMutation = {
+  mutation: FolderWorkspaceMutation;
+  nextSelectedNoteId: string;
 };
 
 export type FolderWorkspacePathChangeOperation = {
@@ -456,6 +461,63 @@ export function renameFolderInWorkspace(
     pathChanges,
     "folder-rename",
   );
+}
+
+export function deleteNoteFromFolderWorkspace(
+  state: FolderWorkspaceState,
+  noteId: string,
+): FolderWorkspaceMutation {
+  const noteToDelete = state.notes.find((note) => note.id === noteId);
+
+  if (noteToDelete === undefined) {
+    throw new Error("Choose an existing note before deleting it.");
+  }
+
+  return {
+    affectedNoteIds: [noteToDelete.id],
+    indexRefresh: {
+      noteIds: [noteToDelete.id],
+      reason: "note-delete",
+    },
+    pathChanges: [],
+    state: reconcileFolderWorkspaceState({
+      ...state,
+      notes: state.notes.filter((note) => note.id !== noteId),
+    }),
+  };
+}
+
+export function getNextSelectedNoteIdAfterDelete(
+  notes: readonly FolderNavigationNote[],
+  deletedNoteId: string,
+  selectedNoteId: string,
+): string {
+  const deletedIndex = notes.findIndex((note) => note.id === deletedNoteId);
+
+  if (deletedIndex === -1) {
+    throw new Error("Choose an existing note before deleting it.");
+  }
+
+  const remainingNotes = notes.filter((note) => note.id !== deletedNoteId);
+
+  if (deletedNoteId !== selectedNoteId) {
+    return remainingNotes.some((note) => note.id === selectedNoteId) ? selectedNoteId : "";
+  }
+
+  return (
+    remainingNotes[deletedIndex]?.id ?? remainingNotes[Math.max(0, deletedIndex - 1)]?.id ?? ""
+  );
+}
+
+export function deleteSelectedNoteFromFolderWorkspace(
+  state: FolderWorkspaceState,
+  noteId: string,
+  selectedNoteId: string,
+): FolderWorkspaceDeleteMutation {
+  return {
+    mutation: deleteNoteFromFolderWorkspace(state, noteId),
+    nextSelectedNoteId: getNextSelectedNoteIdAfterDelete(state.notes, noteId, selectedNoteId),
+  };
 }
 
 function updateOperationStep(

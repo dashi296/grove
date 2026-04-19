@@ -126,7 +126,7 @@ function stripWrappingQuotes(value: string): string {
   const lastCharacter = value[value.length - 1];
 
   if (
-    (firstCharacter === "\"" && lastCharacter === "\"") ||
+    (firstCharacter === '"' && lastCharacter === '"') ||
     (firstCharacter === "'" && lastCharacter === "'")
   ) {
     return value.slice(1, -1).trim();

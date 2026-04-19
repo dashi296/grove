@@ -8,7 +8,7 @@ export type MoveMarkdownFileCommand = {
 
 export type RefreshNoteIndexesCommand = {
   noteIds: readonly string[];
-  reason: "note-move" | "folder-rename" | "note-save" | "note-create";
+  reason: "note-move" | "folder-rename" | "note-save" | "note-create" | "note-delete";
 };
 
 export type ScannedMarkdownNote = {
@@ -29,6 +29,10 @@ export type ReadMarkdownNoteCommand = {
 export type WriteMarkdownNoteCommand = {
   path: string;
   content: string;
+};
+
+export type DeleteMarkdownNoteCommand = {
+  path: string;
 };
 
 export async function moveMarkdownFile(command: MoveMarkdownFileCommand): Promise<void> {
@@ -81,6 +85,10 @@ export async function writeMarkdownNote(
   }
 
   return result;
+}
+
+export async function deleteMarkdownNote(command: DeleteMarkdownNoteCommand): Promise<void> {
+  await invokeCommand("delete_markdown_note", { note: command });
 }
 
 async function invokeCommand(commandName: string, payload: Record<string, unknown>): Promise<void> {
