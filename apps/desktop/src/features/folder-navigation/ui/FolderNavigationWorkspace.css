@@ -8,7 +8,9 @@
 }
 
 .folder-navigation__navigation {
+  background: #ffffff;
   border-right: 1px solid #dce4dd;
+  box-sizing: border-box;
   display: grid;
   gap: 1.25rem;
   padding: 1.25rem;
@@ -27,8 +29,12 @@
 
 .folder-navigation__sidebar,
 .folder-navigation__note-list {
-  border: 1px solid #dce4dd;
-  border-radius: 12px;
+  padding: 0;
+}
+
+.folder-navigation__sidebar {
+  border-bottom: 1px solid #dce4dd;
+  padding-bottom: 1.25rem;
 }
 
 .folder-navigation__eyebrow {
@@ -461,5 +467,9 @@
   .folder-navigation__pane {
     border-bottom: 1px solid #dce4dd;
     border-right: 0;
+  }
+
+  .folder-navigation__navigation {
+    padding-bottom: 1.5rem;
   }
 }
