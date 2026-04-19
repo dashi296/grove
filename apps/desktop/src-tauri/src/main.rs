@@ -350,7 +350,7 @@ async fn read_note_title(path: &Path) -> anyhow::Result<String> {
 
     let content = read_markdown_file(path).await?;
 
-    Ok(find_first_markdown_heading(&content).unwrap_or(fallback_title))
+    Ok(derive_markdown_title(&content, &fallback_title))
 }
 
 async fn read_markdown_file(path: &Path) -> anyhow::Result<String> {
@@ -494,25 +494,54 @@ async fn summarize_markdown_file(
     })
 }
 
+fn derive_markdown_title(content: &str, fallback_title: &str) -> String {
+    find_frontmatter_title(content)
+        .or_else(|| find_first_markdown_heading(content))
+        .unwrap_or_else(|| fallback_title.to_string())
+}
+
+fn find_frontmatter_title(content: &str) -> Option<String> {
+    let normalized_content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let mut lines = normalized_content.lines();
+
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+
+    for line in lines {
+        let trimmed_line = line.trim();
+
+        if matches!(trimmed_line, "---" | "...") {
+            return None;
+        }
+
+        let Some((key, raw_value)) = trimmed_line.split_once(':') else {
+            continue;
+        };
+
+        if !key.trim().eq_ignore_ascii_case("title") {
+            continue;
+        }
+
+        let title = strip_wrapping_quotes(raw_value.trim()).trim();
+
+        if !title.is_empty() {
+            return Some(title.to_string());
+        }
+    }
+
+    None
+}
+
 fn find_first_markdown_heading(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed_line = line.trim_start();
-        let heading_marker_len = trimmed_line
-            .chars()
-            .take_while(|character| *character == '#')
-            .count();
 
-        if heading_marker_len == 0 || heading_marker_len > 6 {
+        if !trimmed_line.starts_with("# ") {
             continue;
         }
 
-        let heading_body = &trimmed_line[heading_marker_len..];
-
-        if !heading_body.starts_with(char::is_whitespace) {
-            continue;
-        }
-
-        let title = strip_closing_heading_marker(heading_body.trim());
+        let title = strip_closing_heading_marker(trimmed_line[2..].trim());
 
         if title.is_empty() {
             continue;
@@ -541,6 +570,19 @@ fn strip_closing_heading_marker(title: &str) -> &str {
     }
 
     trimmed_title
+}
+
+fn strip_wrapping_quotes(value: &str) -> &str {
+    let bytes = value.as_bytes();
+
+    if bytes.len() >= 2
+        && ((bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''))
+    {
+        return value[1..value.len() - 1].trim();
+    }
+
+    value
 }
 
 async fn move_file_without_overwrite(previous_path: &Path, next_path: &Path) -> anyhow::Result<()> {
@@ -606,7 +648,8 @@ mod tests {
     };
 
     use super::{
-        create_markdown_file, find_first_markdown_heading, get_temporary_write_path,
+        create_markdown_file, derive_markdown_title, find_first_markdown_heading,
+        get_temporary_write_path,
         get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
         scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
     };
@@ -696,7 +739,7 @@ mod tests {
 
     #[test]
     fn reads_first_markdown_heading_as_title() {
-        let title = find_first_markdown_heading("#tag\n\n## Project plan ##\nbody")
+        let title = find_first_markdown_heading("#tag\n\n# Project plan ##\nbody")
             .expect("heading should be found");
 
         assert_eq!(title, "Project plan");
@@ -707,6 +750,24 @@ mod tests {
         let title = find_first_markdown_heading("# C#").expect("heading should be found");
 
         assert_eq!(title, "C#");
+    }
+
+    #[test]
+    fn derives_title_from_frontmatter_before_heading() {
+        assert_eq!(
+            derive_markdown_title("---\ntitle: \"Roadmap\"\n---\n# Plan", "Plan"),
+            "Roadmap"
+        );
+    }
+
+    #[test]
+    fn derives_title_from_first_h1_before_the_file_stem() {
+        assert_eq!(derive_markdown_title("## Context\n# Plan ###", "Fallback"), "Plan");
+    }
+
+    #[test]
+    fn falls_back_to_the_file_stem_when_content_has_no_explicit_title() {
+        assert_eq!(derive_markdown_title("Body", "Daily Plan"), "Daily Plan");
     }
 
     #[test]

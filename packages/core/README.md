@@ -133,6 +133,25 @@ path 変更後の一貫性:
 - watcher や index 更新が途中失敗しても Markdown ファイルを正本とし、次回 scan で index を再同期できる状態を維持する
 - folder tree、scoped note list、note count は保存せず、更新後の path 集合から再導出する
 
+## ノートタイトルと rename semantics
+
+ノートタイトルは次の優先順位で導出します。
+
+1. frontmatter の `title`
+2. 最初の Markdown H1 (`# Title`)
+3. file stem (`Project Plan.md` -> `Project Plan`)
+
+この優先順位は `packages/core` の pure helper が定義し、desktop の scan/save metadata も同じルールに合わせます。
+
+title の変更ルール:
+
+- frontmatter `title` を編集した場合は metadata change として扱い、file path は変えない
+- H1 を編集した場合も metadata change として扱い、file path は変えない
+- frontmatter と H1 がないノートでは file stem がタイトルの正本なので、表示タイトルを変えるには Markdown file path を rename する
+- file rename は既存の path semantics に従って collision を検証し、他ノートを silent overwrite しない
+
+この境界により、ローカル Markdown ファイルと UI の title 表示が一貫し、明示タイトルを持つノートと file-name-driven なノートの振る舞いを分けて扱えます。
+
 リンク、タグ、その他 metadata は folder 階層の正本ではありません。
 folder path 変更後は `packages/db` が `core` の path semantics と WikiLink 解決ルールを呼び、SQLite index を再構築または更新します。
 

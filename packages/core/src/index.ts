@@ -14,6 +14,8 @@ export {
   renameFolderInNotePath,
 } from "./folders";
 export type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "./folders";
+export { deriveNoteTitle, renameNoteFilePath } from "./titles";
+export type { DerivedNoteTitle, DerivedNoteTitleSource } from "./titles";
 
 export type NoteLink = {
   fromId: string;
