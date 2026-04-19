@@ -404,11 +404,21 @@ async fn create_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()>
                 error.into()
             }
         })?;
-    file.write_all(content).await?;
-    file.flush().await?;
-    file.sync_all().await?;
 
-    Ok(())
+    let write_result = async {
+        file.write_all(content).await?;
+        file.flush().await?;
+        file.sync_all().await?;
+        anyhow::Ok(())
+    }
+    .await;
+
+    if write_result.is_err() {
+        drop(file);
+        let _ = tokio::fs::remove_file(path).await;
+    }
+
+    write_result
 }
 
 fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
