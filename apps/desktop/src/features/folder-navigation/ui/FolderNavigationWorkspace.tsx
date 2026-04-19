@@ -142,6 +142,10 @@ type PathChangeQueueProps = {
   onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
 };
 
+type FolderNavigationWorkspaceContentProps = {
+  showPathChangeQueue: boolean;
+};
+
 type WorkspaceScanState = {
   status: "loading" | "ready" | "failed";
   errorMessage: string | null;
@@ -922,7 +926,15 @@ function PathChangeQueue({
   );
 }
 
-export function FolderNavigationWorkspace() {
+export function getFolderNavigationWorkspaceClassName(showPathChangeQueue: boolean): string {
+  return showPathChangeQueue
+    ? "folder-navigation folder-navigation--with-queue"
+    : "folder-navigation folder-navigation--without-queue";
+}
+
+export function FolderNavigationWorkspaceContent({
+  showPathChangeQueue,
+}: FolderNavigationWorkspaceContentProps) {
   const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>(initialWorkspaceState);
   const [selectedNoteId, setSelectedNoteId] = useState<string>("");
   const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
@@ -1465,7 +1477,7 @@ export function FolderNavigationWorkspace() {
   }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
 
   return (
-    <section className="folder-navigation">
+    <section className={getFolderNavigationWorkspaceClassName(showPathChangeQueue)}>
       <Sidebar
         noteCount={notes.length}
         folderTree={folderTree}
@@ -1514,15 +1526,21 @@ export function FolderNavigationWorkspace() {
           void deleteSelectedNote();
         }}
       />
-      <PathChangeQueue
-        operations={pathChangeOperations}
-        runningOperationIds={runningOperationIds}
-        onClearCompletedOperations={clearCompletedPathChanges}
-        onRunNextStep={(operationId) => {
-          void runNextPathChangeStep(operationId);
-        }}
-        onRetryStep={retryPathChangeStep}
-      />
+      {showPathChangeQueue ? (
+        <PathChangeQueue
+          operations={pathChangeOperations}
+          runningOperationIds={runningOperationIds}
+          onClearCompletedOperations={clearCompletedPathChanges}
+          onRunNextStep={(operationId) => {
+            void runNextPathChangeStep(operationId);
+          }}
+          onRetryStep={retryPathChangeStep}
+        />
+      ) : null}
     </section>
   );
+}
+
+export function FolderNavigationWorkspace() {
+  return <FolderNavigationWorkspaceContent showPathChangeQueue={import.meta.env.DEV} />;
 }
