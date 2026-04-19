@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@grove/core": "workspace:*",
+    "@grove/editor": "workspace:*",
     "@grove/plugin-api": "workspace:*",
     "@tanstack/react-router": "^1.168.21",
     "@tauri-apps/api": "^2.0.0",
