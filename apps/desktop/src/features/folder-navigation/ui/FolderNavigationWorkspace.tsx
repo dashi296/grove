@@ -12,6 +12,7 @@ import type { FolderScope, FolderTreeNode } from "@grove/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  createMarkdownNote,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -28,6 +29,7 @@ import {
   renameFolderInWorkspace,
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
+import { createNewNotePath } from "../model/noteCreation";
 import {
   canSaveNoteEditBuffer,
   createCleanNoteEditBuffer,
@@ -83,6 +85,10 @@ type NoteListProps = {
   scopedNotes: readonly NoteListItem[];
   selectedNoteId: string;
   scanState: WorkspaceScanState;
+  createState: NoteCreateState;
+  createTitle: string;
+  onCreateTitleChange: (title: string) => void;
+  onCreateNote: () => void;
   onSelectNote: (noteId: string) => void;
 };
 
@@ -130,6 +136,11 @@ type PathChangeQueueProps = {
 
 type WorkspaceScanState = {
   status: "loading" | "ready" | "failed";
+  errorMessage: string | null;
+};
+
+type NoteCreateState = {
+  status: "idle" | "creating" | "failed";
   errorMessage: string | null;
 };
 
@@ -241,6 +252,14 @@ function getNoteReadErrorMessage(error: unknown): string {
 
 function getNoteSaveErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be saved.";
+}
+
+function getNoteCreateErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The Markdown note could not be created.";
+}
+
+function getNoteIndexRefreshErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The note indexes could not be refreshed.";
 }
 
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
@@ -392,6 +411,10 @@ function NoteList({
   scopedNotes,
   selectedNoteId,
   scanState,
+  createState,
+  createTitle,
+  onCreateTitleChange,
+  onCreateNote,
   onSelectNote,
 }: NoteListProps) {
   return (
@@ -399,6 +422,34 @@ function NoteList({
       <p className="folder-navigation__eyebrow">{getFolderLabel(selectedFolderPath)}</p>
       <h2 className="folder-navigation__heading">Notes</h2>
       <WorkspaceScanBanner scanState={scanState} />
+      <div className="folder-navigation__operation">
+        <label className="folder-navigation__label" htmlFor="create-note-title">
+          New note
+        </label>
+        <input
+          id="create-note-title"
+          className="folder-navigation__input"
+          value={createTitle}
+          onChange={(event) => onCreateTitleChange(event.target.value)}
+          placeholder={
+            selectedFolderPath === null
+              ? "Untitled"
+              : `Untitled in ${getFolderDisplayName(selectedFolderPath)}`
+          }
+          disabled={createState.status === "creating" || scanState.status === "loading"}
+        />
+        <button
+          type="button"
+          className="folder-navigation__action"
+          onClick={onCreateNote}
+          disabled={createState.status === "creating" || scanState.status === "loading"}
+        >
+          {createState.status === "creating" ? "Creating" : "Create note"}
+        </button>
+        {createState.errorMessage === null ? null : (
+          <p className="folder-navigation__step-error">{createState.errorMessage}</p>
+        )}
+      </div>
       {scopedNotes.length > 0 ? (
         <ol className="folder-navigation__notes">
           {scopedNotes.map((note) => (
@@ -770,6 +821,11 @@ export function FolderNavigationWorkspace() {
   const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
   const [editorLoadState, setEditorLoadState] = useState<NoteEditorLoadState>({ status: "idle" });
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createState, setCreateState] = useState<NoteCreateState>({
+    status: "idle",
+    errorMessage: null,
+  });
   const [scanState, setScanState] = useState<WorkspaceScanState>({
     status: "loading",
     errorMessage: null,
@@ -895,6 +951,87 @@ export function FolderNavigationWorkspace() {
     setEditorNotice(null);
   }
 
+  const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
+    if (scanState.status !== "ready" || createState.status === "creating") {
+      return;
+    }
+
+    if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
+      setCreateState({
+        status: "failed",
+        errorMessage: "Save or discard the current draft before creating another note.",
+      });
+      return;
+    }
+
+    const nextPath = createNewNotePath(
+      createTitle,
+      selectedFolderPath,
+      workspaceState.notes.map((note) => note.path),
+    );
+
+    setCreateState({
+      status: "creating",
+      errorMessage: null,
+    });
+
+    try {
+      const createdNote = await createMarkdownNote({
+        path: nextPath,
+        content: "",
+      });
+      const [mappedNote] = mapScannedMarkdownNotes([createdNote]);
+
+      if (mappedNote === undefined) {
+        throw new Error("The created Markdown note metadata was missing.");
+      }
+
+      setWorkspaceState((currentState) =>
+        reconcileFolderWorkspaceState({
+          ...currentState,
+          notes: [...currentState.notes, mappedNote].sort((left, right) =>
+            compareWorkspacePaths(left.path, right.path),
+          ),
+          selectedFolderPath,
+          expandedFolderPaths: [
+            ...currentState.expandedFolderPaths,
+            ...getExpandedFolderPathsForNotes([mappedNote]),
+          ],
+        }),
+      );
+      setSelectedNoteId(mappedNote.id);
+      setCreateTitle("");
+      setCreateState({
+        status: "idle",
+        errorMessage: null,
+      });
+      setEditorNotice(null);
+
+      try {
+        await refreshNoteIndexes({
+          noteIds: [mappedNote.id],
+          reason: "note-create",
+        });
+      } catch (error) {
+        setEditorNotice(
+          `Created, but index refresh failed: ${getNoteIndexRefreshErrorMessage(error)}`,
+        );
+      }
+    } catch (error) {
+      setCreateState({
+        status: "failed",
+        errorMessage: getNoteCreateErrorMessage(error),
+      });
+    }
+  }, [
+    createState.status,
+    createTitle,
+    noteEditBuffer,
+    scanState.status,
+    selectedFolderPath,
+    workspaceState.notes,
+  ]);
+
   function markSelectedNoteDraftSaved(buffer: NoteEditBuffer): void {
     setNoteEditBuffer((currentBuffer) => {
       if (currentBuffer === null || currentBuffer.noteId !== buffer.noteId) {
@@ -1000,6 +1137,10 @@ export function FolderNavigationWorkspace() {
         setSelectedNoteId(notes[0]?.id ?? "");
         setScanState({
           status: "ready",
+          errorMessage: null,
+        });
+        setCreateState({
+          status: "idle",
           errorMessage: null,
         });
       } catch (error) {
@@ -1128,6 +1269,17 @@ export function FolderNavigationWorkspace() {
         scopedNotes={scopedNotes}
         selectedNoteId={selectedNoteId}
         scanState={scanState}
+        createState={createState}
+        createTitle={createTitle}
+        onCreateTitleChange={(title) => {
+          setCreateTitle(title);
+          if (createState.errorMessage !== null) {
+            setCreateState({ status: "idle", errorMessage: null });
+          }
+        }}
+        onCreateNote={() => {
+          void createNoteInSelectedFolder();
+        }}
         onSelectNote={selectNote}
       />
       <ActivePane
