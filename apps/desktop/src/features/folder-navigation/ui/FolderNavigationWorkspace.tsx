@@ -119,6 +119,9 @@ type ActivePaneProps = {
   onDiscardDraft: () => void;
   deleteBlockedReason: string | null;
   onDeleteSelectedNote: () => void;
+  isDevelopmentMode: boolean;
+  isPathChangeQueueVisible: boolean;
+  onTogglePathChangeQueue: () => void;
 };
 
 type MoveNoteControlProps = {
@@ -140,6 +143,11 @@ type PathChangeQueueProps = {
   onClearCompletedOperations: () => void;
   onRunNextStep: (operationId: string) => void;
   onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
+};
+
+type FolderNavigationWorkspaceContentProps = {
+  isDevelopmentMode: boolean;
+  initialPathChangeQueueVisibility?: boolean;
 };
 
 type WorkspaceScanState = {
@@ -752,6 +760,9 @@ function ActivePane({
   onDiscardDraft,
   deleteBlockedReason,
   onDeleteSelectedNote,
+  isDevelopmentMode,
+  isPathChangeQueueVisible,
+  onTogglePathChangeQueue,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
@@ -761,7 +772,20 @@ function ActivePane({
   return (
     <section className="folder-navigation__pane">
       <p className="folder-navigation__eyebrow">Active pane</p>
-      <h2 className="folder-navigation__heading">{selectedNote?.title ?? "No note selected"}</h2>
+      <div className="folder-navigation__pane-heading">
+        <h2 className="folder-navigation__heading">{selectedNote?.title ?? "No note selected"}</h2>
+        {isDevelopmentMode ? (
+          <button
+            type="button"
+            className="folder-navigation__queue-toggle"
+            onClick={onTogglePathChangeQueue}
+          >
+            {isPathChangeQueueVisible
+              ? "Hide path change diagnostics"
+              : "Show path change diagnostics"}
+          </button>
+        ) : null}
+      </div>
       <div className="folder-navigation__editor">
         {selectedNote === undefined ? (
           <p>Select a note to manage its workspace path.</p>
@@ -922,7 +946,19 @@ function PathChangeQueue({
   );
 }
 
-export function FolderNavigationWorkspace() {
+export function getFolderNavigationWorkspaceClassName(showPathChangeQueue: boolean): string {
+  return showPathChangeQueue
+    ? "folder-navigation folder-navigation--with-queue"
+    : "folder-navigation folder-navigation--without-queue";
+}
+
+export function FolderNavigationWorkspaceContent({
+  isDevelopmentMode,
+  initialPathChangeQueueVisibility = false,
+}: FolderNavigationWorkspaceContentProps) {
+  const [isPathChangeQueueVisible, setIsPathChangeQueueVisible] = useState(
+    initialPathChangeQueueVisibility,
+  );
   const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>(initialWorkspaceState);
   const [selectedNoteId, setSelectedNoteId] = useState<string>("");
   const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
@@ -1465,7 +1501,9 @@ export function FolderNavigationWorkspace() {
   }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
 
   return (
-    <section className="folder-navigation">
+    <section
+      className={getFolderNavigationWorkspaceClassName(isDevelopmentMode && isPathChangeQueueVisible)}
+    >
       <Sidebar
         noteCount={notes.length}
         folderTree={folderTree}
@@ -1513,16 +1551,27 @@ export function FolderNavigationWorkspace() {
         onDeleteSelectedNote={() => {
           void deleteSelectedNote();
         }}
-      />
-      <PathChangeQueue
-        operations={pathChangeOperations}
-        runningOperationIds={runningOperationIds}
-        onClearCompletedOperations={clearCompletedPathChanges}
-        onRunNextStep={(operationId) => {
-          void runNextPathChangeStep(operationId);
+        isDevelopmentMode={isDevelopmentMode}
+        isPathChangeQueueVisible={isPathChangeQueueVisible}
+        onTogglePathChangeQueue={() => {
+          setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
         }}
-        onRetryStep={retryPathChangeStep}
       />
+      {isDevelopmentMode && isPathChangeQueueVisible ? (
+        <PathChangeQueue
+          operations={pathChangeOperations}
+          runningOperationIds={runningOperationIds}
+          onClearCompletedOperations={clearCompletedPathChanges}
+          onRunNextStep={(operationId) => {
+            void runNextPathChangeStep(operationId);
+          }}
+          onRetryStep={retryPathChangeStep}
+        />
+      ) : null}
     </section>
   );
+}
+
+export function FolderNavigationWorkspace() {
+  return <FolderNavigationWorkspaceContent isDevelopmentMode={import.meta.env.DEV} />;
 }
