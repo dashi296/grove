@@ -16,6 +16,8 @@ export {
 export type { FolderPath, FolderScope, FolderTreeNode, NoteFilePath } from "./folders";
 export { deriveNoteTitle, renameNoteFilePath } from "./titles";
 export type { DerivedNoteTitle, DerivedNoteTitleSource } from "./titles";
+export { parseWikiLinks, resolveWikiLinks } from "./wikiLinks";
+export type { ParsedWikiLink, ResolvedNoteLinks, ResolvedWikiLink, WikiLinkNote } from "./wikiLinks";
 
 export type NoteLink = {
   fromId: string;

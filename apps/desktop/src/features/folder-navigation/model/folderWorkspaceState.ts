@@ -11,6 +11,7 @@ export type FolderNavigationNote = {
   id: string;
   title: string;
   path: NoteFilePath;
+  content?: string;
   updatedLabel: string;
 };
 

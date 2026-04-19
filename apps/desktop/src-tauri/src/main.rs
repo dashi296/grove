@@ -73,6 +73,7 @@ struct IndexRefreshSidecarEntry {
 struct ScannedMarkdownNote {
     path: String,
     title: String,
+    content: String,
     updated_at_unix_ms: u128,
 }
 
@@ -361,19 +362,6 @@ fn system_time_to_unix_ms(time: SystemTime) -> u128 {
         .map_or(0, |duration| duration.as_millis())
 }
 
-async fn read_note_title(path: &Path) -> anyhow::Result<String> {
-    let fallback_title = path
-        .file_stem()
-        .and_then(|file_stem| file_stem.to_str())
-        .unwrap_or("Untitled")
-        .trim()
-        .to_string();
-
-    let content = read_markdown_file(path).await?;
-
-    Ok(derive_markdown_title(&content, &fallback_title))
-}
-
 async fn read_markdown_file(path: &Path) -> anyhow::Result<String> {
     let mut file = tokio::fs::File::open(path).await?;
     let mut content = String::new();
@@ -511,11 +499,19 @@ async fn summarize_markdown_file(
     let relative_path = get_workspace_relative_markdown_path(workspace_root, markdown_path)?;
     let metadata = tokio::fs::metadata(markdown_path).await?;
     let updated_at_unix_ms = system_time_to_unix_ms(metadata.modified()?);
-    let title = read_note_title(markdown_path).await?;
+    let content = read_markdown_file(markdown_path).await?;
+    let fallback_title = markdown_path
+        .file_stem()
+        .and_then(|file_stem| file_stem.to_str())
+        .unwrap_or("Untitled")
+        .trim()
+        .to_string();
+    let title = derive_markdown_title(&content, &fallback_title);
 
     Ok(ScannedMarkdownNote {
         path: relative_path,
         title,
+        content,
         updated_at_unix_ms,
     })
 }
@@ -820,8 +816,10 @@ mod tests {
             assert_eq!(notes.len(), 2);
             assert_eq!(notes[0].path, "Inbox.MD");
             assert_eq!(notes[0].title, "Inbox");
+            assert_eq!(notes[0].content, "no heading");
             assert_eq!(notes[1].path, "Projects/Plan.md");
             assert_eq!(notes[1].title, "Plan");
+            assert_eq!(notes[1].content, "# Plan\nbody");
             tokio::fs::remove_dir_all(&workspace_dir).await?;
             anyhow::Ok(())
         })

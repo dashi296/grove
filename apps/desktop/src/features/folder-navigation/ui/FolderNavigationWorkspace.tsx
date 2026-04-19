@@ -7,8 +7,9 @@ import {
   isNoteInFolderScope,
   normalizeFolderPath,
   normalizeFolderScope,
+  resolveWikiLinks,
 } from "@grove/core";
-import type { FolderScope, FolderTreeNode } from "@grove/core";
+import type { FolderScope, FolderTreeNode, ResolvedWikiLink } from "@grove/core";
 import type { MarkdownCommand, MarkdownSelection } from "@grove/editor";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -122,6 +123,9 @@ type ActivePaneProps = {
   isDevelopmentMode: boolean;
   isPathChangeQueueVisible: boolean;
   onTogglePathChangeQueue: () => void;
+  selectedNoteLinks: readonly ResolvedWikiLink[];
+  selectedNoteBacklinks: readonly ResolvedWikiLink[];
+  noteTitlesById: ReadonlyMap<string, string>;
 };
 
 type MoveNoteControlProps = {
@@ -180,6 +184,14 @@ type NoteEditorProps = {
   onDiscardDraft: () => void;
 };
 
+type NoteLinkListProps = {
+  kind: "outgoing" | "backlinks";
+  heading: string;
+  emptyMessage: string;
+  links: readonly ResolvedWikiLink[];
+  noteTitlesById: ReadonlyMap<string, string>;
+};
+
 const initialWorkspaceState: FolderWorkspaceState = {
   notes: [],
   explicitFolders: [],
@@ -229,6 +241,24 @@ function getPathChangeSummary(pathChanges: readonly FolderWorkspacePathChange[])
 
   const noun = pathChanges.length === 1 ? "change" : "changes";
   return `${pathChanges.length} file path ${noun} queued for file move and index refresh.`;
+}
+
+function getNoteLinkLabel(
+  link: ResolvedWikiLink,
+  noteTitlesById: ReadonlyMap<string, string>,
+  kind: NoteLinkListProps["kind"],
+): string {
+  if (kind === "backlinks") {
+    const sourceTitle = noteTitlesById.get(link.fromId) ?? link.fromId;
+    return link.alias === null ? sourceTitle : `${sourceTitle} via ${link.alias}`;
+  }
+
+  if (link.toId === null) {
+    return link.alias === null ? link.target : `${link.alias} -> ${link.target}`;
+  }
+
+  const targetTitle = noteTitlesById.get(link.toId) ?? link.target;
+  return link.alias === null ? targetTitle : `${link.alias} -> ${targetTitle}`;
 }
 
 function getOperationReasonLabel(reason: FolderWorkspacePathChangeOperation["reason"]): string {
@@ -743,7 +773,35 @@ function NoteEditor({
   );
 }
 
-function ActivePane({
+function NoteLinkList({ kind, heading, emptyMessage, links, noteTitlesById }: NoteLinkListProps) {
+  return (
+    <section className="folder-navigation__link-section" aria-label={heading}>
+      <h3 className="folder-navigation__link-heading">{heading}</h3>
+      {links.length === 0 ? (
+        <p className="folder-navigation__muted">{emptyMessage}</p>
+      ) : (
+        <ul className="folder-navigation__link-list">
+          {links.map((link, index) => (
+            <li key={`${link.fromId}-${link.target}-${link.alias ?? "no-alias"}-${index}`}>
+              <span
+                className={
+                  link.isResolved
+                    ? "folder-navigation__link-status"
+                    : "folder-navigation__link-status folder-navigation__link-status--unresolved"
+                }
+              >
+                {link.isResolved ? "Resolved" : "Unresolved"}
+              </span>
+              <span>{getNoteLinkLabel(link, noteTitlesById, kind)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function ActivePane({
   notes,
   folderOptions,
   selectedFolderPath,
@@ -763,6 +821,9 @@ function ActivePane({
   isDevelopmentMode,
   isPathChangeQueueVisible,
   onTogglePathChangeQueue,
+  selectedNoteLinks,
+  selectedNoteBacklinks,
+  noteTitlesById,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
@@ -802,6 +863,22 @@ function ActivePane({
               saveBlockedReason={saveBlockedReason}
               onDiscardDraft={onDiscardDraft}
             />
+            <div className="folder-navigation__link-sections">
+              <NoteLinkList
+                kind="outgoing"
+                heading="Links"
+                emptyMessage="No WikiLinks in this note yet."
+                links={selectedNoteLinks}
+                noteTitlesById={noteTitlesById}
+              />
+              <NoteLinkList
+                kind="backlinks"
+                heading="Backlinks"
+                emptyMessage="No backlinks point to this note yet."
+                links={selectedNoteBacklinks}
+                noteTitlesById={noteTitlesById}
+              />
+            </div>
             <MoveNoteControl
               folderOptions={folderOptions}
               selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
@@ -1004,6 +1081,24 @@ export function FolderNavigationWorkspaceContent({
   const selectedNote = useMemo(() => {
     return notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   }, [notes, selectedNoteId]);
+  const resolvedNoteLinks = useMemo(() => {
+    return resolveWikiLinks(
+      notes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        content: note.content ?? "",
+      })),
+    );
+  }, [notes]);
+  const resolvedNoteLinksByNoteId = useMemo(() => {
+    return new Map(resolvedNoteLinks.map((noteLinks) => [noteLinks.noteId, noteLinks]));
+  }, [resolvedNoteLinks]);
+  const noteTitlesById = useMemo(() => {
+    return new Map(notes.map((note) => [note.id, note.title]));
+  }, [notes]);
+  const selectedResolvedNoteLinks = selectedNote
+    ? resolvedNoteLinksByNoteId.get(selectedNote.id) ?? null
+    : null;
   const saveBlockedReason =
     !canSaveNoteEditBuffer(noteEditBuffer) ||
     !isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)
@@ -1556,6 +1651,9 @@ export function FolderNavigationWorkspaceContent({
         onTogglePathChangeQueue={() => {
           setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
         }}
+        selectedNoteLinks={selectedResolvedNoteLinks?.links ?? []}
+        selectedNoteBacklinks={selectedResolvedNoteLinks?.backlinks ?? []}
+        noteTitlesById={noteTitlesById}
       />
       {isDevelopmentMode && isPathChangeQueueVisible ? (
         <PathChangeQueue

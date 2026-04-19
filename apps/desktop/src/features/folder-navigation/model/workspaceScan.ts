@@ -24,6 +24,7 @@ function mapScannedMarkdownNote(scannedNote: ScannedMarkdownNote): FolderNavigat
     id: path,
     path,
     title,
+    content: scannedNote.content,
     updatedLabel: formatUpdatedLabel(scannedNote.updatedAtUnixMs),
   };
 }

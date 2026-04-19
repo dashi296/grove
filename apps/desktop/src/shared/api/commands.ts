@@ -14,6 +14,7 @@ export type RefreshNoteIndexesCommand = {
 export type ScannedMarkdownNote = {
   path: string;
   title: string;
+  content: string;
   updatedAtUnixMs: number;
 };
 
@@ -143,6 +144,8 @@ function isScannedMarkdownNote(value: unknown): value is ScannedMarkdownNote {
     typeof value.path === "string" &&
     "title" in value &&
     typeof value.title === "string" &&
+    "content" in value &&
+    typeof value.content === "string" &&
     "updatedAtUnixMs" in value &&
     typeof value.updatedAtUnixMs === "number" &&
     Number.isFinite(value.updatedAtUnixMs) &&
