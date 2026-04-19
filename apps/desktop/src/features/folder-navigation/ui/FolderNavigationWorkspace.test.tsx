@@ -9,16 +9,12 @@ import {
 } from "./FolderNavigationWorkspace";
 
 describe("getFolderNavigationWorkspaceClassName", () => {
-  it("uses the four-column layout when the queue is visible", () => {
-    expect(getFolderNavigationWorkspaceClassName(true)).toBe(
-      "folder-navigation folder-navigation--with-queue",
-    );
+  it("keeps the same two-pane layout when the queue is visible", () => {
+    expect(getFolderNavigationWorkspaceClassName(true)).toBe("folder-navigation");
   });
 
-  it("uses the three-column layout when the queue is hidden", () => {
-    expect(getFolderNavigationWorkspaceClassName(false)).toBe(
-      "folder-navigation folder-navigation--without-queue",
-    );
+  it("keeps the same two-pane layout when the queue is hidden", () => {
+    expect(getFolderNavigationWorkspaceClassName(false)).toBe("folder-navigation");
   });
 });
 
@@ -31,7 +27,7 @@ describe("FolderNavigationWorkspaceContent", () => {
     expect(markup).toContain("Show path change diagnostics");
     expect(markup).not.toContain("Pending path changes");
     expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation--without-queue");
+    expect(markup).toContain("folder-navigation__navigation");
   });
 
   it("renders the path change queue when development diagnostics are expanded", () => {
@@ -45,7 +41,7 @@ describe("FolderNavigationWorkspaceContent", () => {
     expect(markup).toContain("Hide path change diagnostics");
     expect(markup).toContain("Pending path changes");
     expect(markup).toContain("Path change queue");
-    expect(markup).toContain("folder-navigation--with-queue");
+    expect(markup).toContain("folder-navigation__navigation");
   });
 
   it("hides both the queue and the diagnostics toggle in production mode", () => {
@@ -57,7 +53,7 @@ describe("FolderNavigationWorkspaceContent", () => {
     expect(markup).not.toContain("Hide path change diagnostics");
     expect(markup).not.toContain("Pending path changes");
     expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation--without-queue");
+    expect(markup).toContain("folder-navigation__navigation");
   });
 });
 
@@ -96,6 +92,11 @@ describe("ActivePane", () => {
         isDevelopmentMode={false}
         isPathChangeQueueVisible={false}
         onTogglePathChangeQueue={() => {}}
+        pathChangeOperations={[]}
+        runningOperationIds={[]}
+        onClearCompletedOperations={() => {}}
+        onRunNextStep={() => {}}
+        onRetryStep={() => {}}
         selectedNoteLinks={[
           {
             target: "Research",
