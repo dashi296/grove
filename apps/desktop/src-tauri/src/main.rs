@@ -385,11 +385,30 @@ async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> 
 }
 
 async fn create_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> {
-    if tokio::fs::try_exists(path).await? {
-        anyhow::bail!("The target Markdown file already exists: {}", path.display());
+    if let Some(parent_path) = path.parent() {
+        tokio::fs::create_dir_all(parent_path).await?;
     }
 
-    write_markdown_file(path, content).await
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .await
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                anyhow::anyhow!(
+                    "The target Markdown file already exists: {}",
+                    path.display()
+                )
+            } else {
+                error.into()
+            }
+        })?;
+    file.write_all(content).await?;
+    file.flush().await?;
+    file.sync_all().await?;
+
+    Ok(())
 }
 
 fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
@@ -577,10 +596,9 @@ mod tests {
     };
 
     use super::{
-        find_first_markdown_heading, get_temporary_write_path,
+        create_markdown_file, find_first_markdown_heading, get_temporary_write_path,
         get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
         scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
-        create_markdown_file,
     };
 
     fn run_async<F>(future: F) -> F::Output

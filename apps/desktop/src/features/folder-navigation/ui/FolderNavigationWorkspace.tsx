@@ -952,7 +952,7 @@ export function FolderNavigationWorkspace() {
   }
 
   const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
-    if (scanState.status !== "ready") {
+    if (scanState.status !== "ready" || createState.status === "creating") {
       return;
     }
 
@@ -1023,7 +1023,14 @@ export function FolderNavigationWorkspace() {
         errorMessage: getNoteCreateErrorMessage(error),
       });
     }
-  }, [createTitle, noteEditBuffer, scanState.status, selectedFolderPath, workspaceState.notes]);
+  }, [
+    createState.status,
+    createTitle,
+    noteEditBuffer,
+    scanState.status,
+    selectedFolderPath,
+    workspaceState.notes,
+  ]);
 
   function markSelectedNoteDraftSaved(buffer: NoteEditBuffer): void {
     setNoteEditBuffer((currentBuffer) => {
