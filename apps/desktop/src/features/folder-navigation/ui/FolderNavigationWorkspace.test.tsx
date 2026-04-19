@@ -95,12 +95,17 @@ describe("NavigationPane", () => {
         expandedFolderPaths={[normalizeFolderPath("Projects"), selectedFolderPath]}
         onSelect={() => {}}
         onToggle={() => {}}
-        scopedNotes={notes.filter((note) => note.path.startsWith("Projects/Grove/"))}
+        visibleNotes={notes.filter((note) => note.path.startsWith("Projects/Grove/"))}
         selectedNoteId="note-plan"
         scanState={{ status: "ready", errorMessage: null }}
         createState={{ status: "idle", errorMessage: null }}
         createTitle=""
+        searchQuery=""
+        searchIndexState={{ status: "ready" }}
+        restrictSearchToSelectedFolder={false}
         onCreateTitleChange={() => {}}
+        onSearchQueryChange={() => {}}
+        onRestrictSearchToSelectedFolderChange={() => {}}
         onCreateNote={() => {}}
         onSelectNote={() => {}}
         activeWorkspaceName=""

@@ -451,6 +451,14 @@
   font-weight: 600;
 }
 
+.folder-navigation__checkbox-row {
+  align-items: center;
+  color: #39483f;
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
 .folder-navigation__input,
 .folder-navigation__select,
 .folder-navigation__textarea {

@@ -39,6 +39,7 @@ import {
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
 import { dispatchMarkdownEditorCommand } from "../model/markdownEditor";
 import { createNewNotePath } from "../model/noteCreation";
+import { searchFolderNavigationNotes } from "../model/noteSearch";
 import {
   canSaveNoteEditBuffer,
   createCleanNoteEditBuffer,
@@ -102,12 +103,17 @@ type SidebarProps = {
 
 type NoteListProps = {
   selectedFolderPath: FolderScope;
-  scopedNotes: readonly NoteListItem[];
+  visibleNotes: readonly NoteListItem[];
   selectedNoteId: string;
   scanState: WorkspaceScanState;
   createState: NoteCreateState;
   createTitle: string;
+  searchQuery: string;
+  searchIndexState: SearchIndexState;
+  restrictSearchToSelectedFolder: boolean;
   onCreateTitleChange: (title: string) => void;
+  onSearchQueryChange: (value: string) => void;
+  onRestrictSearchToSelectedFolderChange: (checked: boolean) => void;
   onCreateNote: () => void;
   onSelectNote: (noteId: string) => void;
 };
@@ -217,6 +223,10 @@ type NoteEditorLoadState = {
 type NoteDeleteState = {
   status: "idle" | "deleting" | "failed";
   errorMessage: string | null;
+};
+
+type SearchIndexState = {
+  status: "idle" | "indexing" | "ready";
 };
 
 type NoteEditorProps = {
@@ -937,12 +947,17 @@ export function NavigationPane({
   expandedFolderPaths,
   onSelect,
   onToggle,
-  scopedNotes,
+  visibleNotes,
   selectedNoteId,
   scanState,
   createState,
   createTitle,
+  searchQuery,
+  searchIndexState,
+  restrictSearchToSelectedFolder,
   onCreateTitleChange,
+  onSearchQueryChange,
+  onRestrictSearchToSelectedFolderChange,
   onCreateNote,
   onSelectNote,
   activeWorkspaceName,
@@ -972,12 +987,17 @@ export function NavigationPane({
       />
       <NoteList
         selectedFolderPath={selectedFolderPath}
-        scopedNotes={scopedNotes}
+        visibleNotes={visibleNotes}
         selectedNoteId={selectedNoteId}
         scanState={scanState}
         createState={createState}
         createTitle={createTitle}
+        searchQuery={searchQuery}
+        searchIndexState={searchIndexState}
+        restrictSearchToSelectedFolder={restrictSearchToSelectedFolder}
         onCreateTitleChange={onCreateTitleChange}
+        onSearchQueryChange={onSearchQueryChange}
+        onRestrictSearchToSelectedFolderChange={onRestrictSearchToSelectedFolderChange}
         onCreateNote={onCreateNote}
         onSelectNote={onSelectNote}
       />
@@ -987,20 +1007,61 @@ export function NavigationPane({
 
 function NoteList({
   selectedFolderPath,
-  scopedNotes,
+  visibleNotes,
   selectedNoteId,
   scanState,
   createState,
   createTitle,
+  searchQuery,
+  searchIndexState,
+  restrictSearchToSelectedFolder,
   onCreateTitleChange,
+  onSearchQueryChange,
+  onRestrictSearchToSelectedFolderChange,
   onCreateNote,
   onSelectNote,
 }: NoteListProps) {
+  const showingSearchResults = searchQuery.trim() !== "";
+
   return (
     <section className="folder-navigation__notes-column" aria-label="Notes">
       <p className="folder-navigation__eyebrow">{getFolderLabel(selectedFolderPath)}</p>
       <h2 className="folder-navigation__heading">Notes</h2>
       <WorkspaceScanBanner scanState={scanState} />
+      <div className="folder-navigation__operation">
+        <label className="folder-navigation__label" htmlFor="search-notes">
+          Search notes
+        </label>
+        <input
+          id="search-notes"
+          className="folder-navigation__input"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          placeholder="Search title, path, or Markdown content"
+          disabled={scanState.status === "loading"}
+        />
+        <label className="folder-navigation__checkbox-row" htmlFor="search-current-folder">
+          <input
+            id="search-current-folder"
+            type="checkbox"
+            checked={restrictSearchToSelectedFolder}
+            onChange={(event) => onRestrictSearchToSelectedFolderChange(event.target.checked)}
+            disabled={selectedFolderPath === null}
+          />
+          Limit results to the current folder
+        </label>
+        {showingSearchResults ? (
+          <p className="folder-navigation__muted">
+            {visibleNotes.length} result{visibleNotes.length === 1 ? "" : "s"}
+            {restrictSearchToSelectedFolder && selectedFolderPath !== null
+              ? ` in ${getFolderDisplayName(selectedFolderPath)}`
+              : " across the workspace"}
+          </p>
+        ) : null}
+        {showingSearchResults && searchIndexState.status === "indexing" ? (
+          <p className="folder-navigation__muted">Indexing Markdown content for search...</p>
+        ) : null}
+      </div>
       <div className="folder-navigation__operation">
         <label className="folder-navigation__label" htmlFor="create-note-title">
           New note
@@ -1029,9 +1090,9 @@ function NoteList({
           <p className="folder-navigation__step-error">{createState.errorMessage}</p>
         )}
       </div>
-      {scopedNotes.length > 0 ? (
+      {visibleNotes.length > 0 ? (
         <ol className="folder-navigation__notes">
-          {scopedNotes.map((note) => (
+          {visibleNotes.map((note) => (
             <li key={note.id} className="folder-navigation__note">
               <button
                 type="button"
@@ -1051,6 +1112,13 @@ function NoteList({
             </li>
           ))}
         </ol>
+      ) : showingSearchResults ? (
+        <div className="folder-navigation__empty">
+          <h3 className="folder-navigation__note-title">No search results</h3>
+          <p className="folder-navigation__muted">
+            Try a different keyword or widen the folder scope.
+          </p>
+        </div>
       ) : (
         <EmptyNoteList selectedFolderPath={selectedFolderPath} scanState={scanState} />
       )}
@@ -1610,6 +1678,10 @@ export function FolderNavigationWorkspaceContent({
   const [editorLoadState, setEditorLoadState] = useState<NoteEditorLoadState>({ status: "idle" });
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [createTitle, setCreateTitle] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [restrictSearchToSelectedFolder, setRestrictSearchToSelectedFolder] = useState(false);
+  const [searchIndexState, setSearchIndexState] = useState<SearchIndexState>({ status: "idle" });
+  const [searchContentByNoteId, setSearchContentByNoteId] = useState<Record<string, string>>({});
   const [createState, setCreateState] = useState<NoteCreateState>({
     status: "idle",
     errorMessage: null,
@@ -1647,6 +1719,30 @@ export function FolderNavigationWorkspaceContent({
   const scopedNotes = useMemo(() => {
     return filterNotesByFolderScope(notes, selectedFolderPath);
   }, [notes, selectedFolderPath]);
+  const searchableNotes = useMemo(() => {
+    return notes.map((note) => ({
+      ...note,
+      content: searchContentByNoteId[note.id] ?? "",
+    }));
+  }, [notes, searchContentByNoteId]);
+  const visibleNotes = useMemo(() => {
+    if (searchQuery.trim() === "") {
+      return scopedNotes;
+    }
+
+    return searchFolderNavigationNotes({
+      query: searchQuery,
+      notes: searchableNotes,
+      selectedFolderPath,
+      restrictToSelectedFolder: restrictSearchToSelectedFolder,
+    });
+  }, [
+    restrictSearchToSelectedFolder,
+    scopedNotes,
+    searchQuery,
+    searchableNotes,
+    selectedFolderPath,
+  ]);
   const selectedNote = useMemo(() => {
     return notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   }, [notes, selectedNoteId]);
@@ -1930,6 +2026,10 @@ export function FolderNavigationWorkspaceContent({
           ],
         }),
       );
+      setSearchContentByNoteId((currentState) => ({
+        ...currentState,
+        [mappedNote.id]: "",
+      }));
       setSelectedNoteId(mappedNote.id);
       setCreateTitle("");
       setCreateState({
@@ -2019,6 +2119,10 @@ export function FolderNavigationWorkspaceContent({
           savedNote,
         }),
       );
+      setSearchContentByNoteId((currentState) => ({
+        ...currentState,
+        [buffer.noteId]: buffer.draftContent,
+      }));
       markSelectedNoteDraftSaved(buffer);
 
       try {
@@ -2046,6 +2150,49 @@ export function FolderNavigationWorkspaceContent({
     });
     setEditorNotice(null);
   }
+
+  useEffect(() => {
+    if (notes.length === 0) {
+      setSearchContentByNoteId({});
+      setSearchIndexState({ status: "ready" });
+      return;
+    }
+
+    let canceled = false;
+
+    async function buildSearchIndex(): Promise<void> {
+      setSearchIndexState({ status: "indexing" });
+
+      const noteEntries = await Promise.all(
+        notes.map(async (note) => {
+          try {
+            return [note.id, await readMarkdownNote({ path: note.path })] as const;
+          } catch {
+            return [note.id, ""] as const;
+          }
+        }),
+      );
+
+      if (canceled) {
+        return;
+      }
+
+      setSearchContentByNoteId(Object.fromEntries(noteEntries));
+      setSearchIndexState({ status: "ready" });
+    }
+
+    void buildSearchIndex();
+
+    return () => {
+      canceled = true;
+    };
+  }, [notes]);
+
+  useEffect(() => {
+    if (selectedFolderPath === null) {
+      setRestrictSearchToSelectedFolder(false);
+    }
+  }, [selectedFolderPath]);
 
   useEffect(() => {
     void useWorkspaceStore.getState().loadWorkspaces();
@@ -2161,6 +2308,10 @@ export function FolderNavigationWorkspaceContent({
         }
 
         setNoteEditBuffer(createCleanNoteEditBuffer(selectedNote.id, selectedNote.path, content));
+        setSearchContentByNoteId((currentState) => ({
+          ...currentState,
+          [selectedNote.id]: content,
+        }));
       } catch (error) {
         if (canceled) {
           return;
@@ -2227,17 +2378,22 @@ export function FolderNavigationWorkspaceContent({
         expandedFolderPaths={expandedFolderPaths}
         onSelect={selectFolder}
         onToggle={toggleFolder}
-        scopedNotes={scopedNotes}
+        visibleNotes={visibleNotes}
         selectedNoteId={selectedNoteId}
         scanState={scanState}
         createState={createState}
         createTitle={createTitle}
+        searchQuery={searchQuery}
+        searchIndexState={searchIndexState}
+        restrictSearchToSelectedFolder={restrictSearchToSelectedFolder}
         onCreateTitleChange={(title) => {
           setCreateTitle(title);
           if (createState.errorMessage !== null) {
             setCreateState({ status: "idle", errorMessage: null });
           }
         }}
+        onSearchQueryChange={setSearchQuery}
+        onRestrictSearchToSelectedFolderChange={setRestrictSearchToSelectedFolder}
         onCreateNote={() => {
           void createNoteInSelectedFolder();
         }}
