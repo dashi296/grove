@@ -7,6 +7,7 @@ import type {
 } from "./folderWorkspaceState";
 import {
   applySavedNoteMetadataToWorkspaceState,
+  isNoteAffectedByPathChange,
   isNoteSaveBlockedByPathChange,
   isNoteSaveKeyboardShortcut,
 } from "./noteSave";
@@ -82,7 +83,7 @@ describe("applySavedNoteMetadataToWorkspaceState", () => {
   });
 });
 
-describe("isNoteSaveBlockedByPathChange", () => {
+describe("isNoteAffectedByPathChange", () => {
   const pendingOperation: FolderWorkspacePathChangeOperation = {
     id: "path-change-1",
     affectedNoteIds: ["note-plan"],
@@ -106,11 +107,11 @@ describe("isNoteSaveBlockedByPathChange", () => {
     ],
   };
 
-  it("blocks saves while the note has unfinished path changes", () => {
-    expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-plan")).toBe(true);
+  it("tracks whether a note still has unfinished path changes", () => {
+    expect(isNoteAffectedByPathChange([pendingOperation], "note-plan")).toBe(true);
   });
 
-  it("allows saves for unrelated notes and completed path changes", () => {
+  it("ignores unrelated notes and completed path changes", () => {
     const completedOperation: FolderWorkspacePathChangeOperation = {
       ...pendingOperation,
       steps: pendingOperation.steps.map((step) => ({
@@ -119,8 +120,39 @@ describe("isNoteSaveBlockedByPathChange", () => {
       })),
     };
 
-    expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-research")).toBe(false);
-    expect(isNoteSaveBlockedByPathChange([completedOperation], "note-plan")).toBe(false);
+    expect(isNoteAffectedByPathChange([pendingOperation], "note-research")).toBe(false);
+    expect(isNoteAffectedByPathChange([completedOperation], "note-plan")).toBe(false);
+  });
+});
+
+describe("isNoteSaveBlockedByPathChange", () => {
+  it("keeps save-specific callers aligned with the generic path-change guard", () => {
+    const pendingOperation: FolderWorkspacePathChangeOperation = {
+      id: "path-change-1",
+      affectedNoteIds: ["note-plan"],
+      pathChanges: [
+        {
+          noteId: "note-plan",
+          previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+          nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+        },
+      ],
+      reason: "note-move",
+      steps: [
+        {
+          id: "file-move",
+          status: "pending",
+        },
+        {
+          id: "index-refresh",
+          status: "pending",
+        },
+      ],
+    };
+
+    expect(isNoteSaveBlockedByPathChange([pendingOperation], "note-plan")).toBe(
+      isNoteAffectedByPathChange([pendingOperation], "note-plan"),
+    );
   });
 });
 

@@ -48,6 +48,7 @@ import {
 } from "../model/noteEditBuffer";
 import {
   applySavedNoteMetadataToWorkspaceState,
+  isNoteAffectedByPathChange,
   isNoteSaveBlockedByPathChange,
   isNoteSaveKeyboardShortcut,
 } from "../model/noteSave";
@@ -116,6 +117,7 @@ type ActivePaneProps = {
   onSaveDraft: () => void;
   saveBlockedReason: string | null;
   onDiscardDraft: () => void;
+  deleteBlockedReason: string | null;
   onDeleteSelectedNote: () => void;
 };
 
@@ -741,6 +743,7 @@ function ActivePane({
   onSaveDraft,
   saveBlockedReason,
   onDiscardDraft,
+  deleteBlockedReason,
   onDeleteSelectedNote,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
@@ -779,13 +782,16 @@ function ActivePane({
                 type="button"
                 className="folder-navigation__secondary-action"
                 onClick={onDeleteSelectedNote}
-                disabled={deleteState.status === "deleting"}
+                disabled={deleteState.status === "deleting" || deleteBlockedReason !== null}
               >
                 {deleteState.status === "deleting" ? "Deleting" : "Delete note"}
               </button>
               <p className="folder-navigation__muted">
                 Permanently deletes the Markdown file from this workspace.
               </p>
+              {deleteBlockedReason === null ? null : (
+                <p className="folder-navigation__step-error">{deleteBlockedReason}</p>
+              )}
               {deleteState.errorMessage === null ? null : (
                 <p className="folder-navigation__step-error">{deleteState.errorMessage}</p>
               )}
@@ -959,6 +965,10 @@ export function FolderNavigationWorkspace() {
     !isNoteSaveBlockedByPathChange(pathChangeOperations, noteEditBuffer.noteId)
       ? null
       : noteSaveBlockedMessage;
+  const deleteBlockedReason =
+    selectedNote === undefined || !isNoteAffectedByPathChange(pathChangeOperations, selectedNote.id)
+      ? null
+      : "Delete is unavailable while this note has unfinished path changes.";
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
     setWorkspaceState(reconcileFolderWorkspaceState(nextState));
@@ -1059,6 +1069,14 @@ export function FolderNavigationWorkspace() {
       return;
     }
 
+    if (isNoteAffectedByPathChange(pathChangeOperations, note.id)) {
+      setDeleteState({
+        status: "failed",
+        errorMessage: "Delete is unavailable while this note has unfinished path changes.",
+      });
+      return;
+    }
+
     if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
       setDeleteState({
         status: "failed",
@@ -1125,7 +1143,7 @@ export function FolderNavigationWorkspace() {
         errorMessage: getNoteDeleteErrorMessage(error),
       });
     }
-  }, [deleteState.status, noteEditBuffer, selectedNote, selectedNoteId]);
+  }, [deleteState.status, noteEditBuffer, pathChangeOperations, selectedNote, selectedNoteId]);
 
   const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
     if (scanState.status !== "ready" || createState.status === "creating") {
@@ -1479,6 +1497,7 @@ export function FolderNavigationWorkspace() {
         }}
         saveBlockedReason={saveBlockedReason}
         onDiscardDraft={discardSelectedDraft}
+        deleteBlockedReason={deleteBlockedReason}
         onDeleteSelectedNote={() => {
           void deleteSelectedNote();
         }}
