@@ -98,6 +98,8 @@ type NoteListProps = {
   onSelectNote: (noteId: string) => void;
 };
 
+type NavigationPaneProps = SidebarProps & NoteListProps;
+
 type FolderOption = {
   path: FolderScope;
   label: string;
@@ -123,6 +125,11 @@ type ActivePaneProps = {
   isDevelopmentMode: boolean;
   isPathChangeQueueVisible: boolean;
   onTogglePathChangeQueue: () => void;
+  pathChangeOperations: readonly FolderWorkspacePathChangeOperation[];
+  runningOperationIds: readonly string[];
+  onClearCompletedOperations: () => void;
+  onRunNextStep: (operationId: string) => void;
+  onRetryStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
   selectedNoteLinks: readonly ResolvedWikiLink[];
   selectedNoteBacklinks: readonly ResolvedWikiLink[];
   noteTitlesById: ReadonlyMap<string, string>;
@@ -476,6 +483,47 @@ function Sidebar({
   );
 }
 
+function NavigationPane({
+  noteCount,
+  folderTree,
+  selectedFolderPath,
+  expandedFolderPaths,
+  onSelect,
+  onToggle,
+  scopedNotes,
+  selectedNoteId,
+  scanState,
+  createState,
+  createTitle,
+  onCreateTitleChange,
+  onCreateNote,
+  onSelectNote,
+}: NavigationPaneProps) {
+  return (
+    <aside className="folder-navigation__navigation">
+      <Sidebar
+        noteCount={noteCount}
+        folderTree={folderTree}
+        selectedFolderPath={selectedFolderPath}
+        expandedFolderPaths={expandedFolderPaths}
+        onSelect={onSelect}
+        onToggle={onToggle}
+      />
+      <NoteList
+        selectedFolderPath={selectedFolderPath}
+        scopedNotes={scopedNotes}
+        selectedNoteId={selectedNoteId}
+        scanState={scanState}
+        createState={createState}
+        createTitle={createTitle}
+        onCreateTitleChange={onCreateTitleChange}
+        onCreateNote={onCreateNote}
+        onSelectNote={onSelectNote}
+      />
+    </aside>
+  );
+}
+
 function NoteList({
   selectedFolderPath,
   scopedNotes,
@@ -821,6 +869,11 @@ export function ActivePane({
   isDevelopmentMode,
   isPathChangeQueueVisible,
   onTogglePathChangeQueue,
+  pathChangeOperations,
+  runningOperationIds,
+  onClearCompletedOperations,
+  onRunNextStep,
+  onRetryStep,
   selectedNoteLinks,
   selectedNoteBacklinks,
   noteTitlesById,
@@ -906,6 +959,15 @@ export function ActivePane({
             </div>
           </>
         )}
+        {isDevelopmentMode && isPathChangeQueueVisible ? (
+          <PathChangeQueue
+            operations={pathChangeOperations}
+            runningOperationIds={runningOperationIds}
+            onClearCompletedOperations={onClearCompletedOperations}
+            onRunNextStep={onRunNextStep}
+            onRetryStep={onRetryStep}
+          />
+        ) : null}
         <RenameFolderControl
           selectedFolderPath={selectedFolderPath}
           onRenameSelectedFolder={onRenameSelectedFolder}
@@ -1024,9 +1086,8 @@ function PathChangeQueue({
 }
 
 export function getFolderNavigationWorkspaceClassName(showPathChangeQueue: boolean): string {
-  return showPathChangeQueue
-    ? "folder-navigation folder-navigation--with-queue"
-    : "folder-navigation folder-navigation--without-queue";
+  void showPathChangeQueue;
+  return "folder-navigation";
 }
 
 export function FolderNavigationWorkspaceContent({
@@ -1599,16 +1660,13 @@ export function FolderNavigationWorkspaceContent({
     <section
       className={getFolderNavigationWorkspaceClassName(isDevelopmentMode && isPathChangeQueueVisible)}
     >
-      <Sidebar
+      <NavigationPane
         noteCount={notes.length}
         folderTree={folderTree}
         selectedFolderPath={selectedFolderPath}
         expandedFolderPaths={expandedFolderPaths}
         onSelect={selectFolder}
         onToggle={toggleFolder}
-      />
-      <NoteList
-        selectedFolderPath={selectedFolderPath}
         scopedNotes={scopedNotes}
         selectedNoteId={selectedNoteId}
         scanState={scanState}
@@ -1651,21 +1709,17 @@ export function FolderNavigationWorkspaceContent({
         onTogglePathChangeQueue={() => {
           setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
         }}
+        pathChangeOperations={pathChangeOperations}
+        runningOperationIds={runningOperationIds}
+        onClearCompletedOperations={clearCompletedPathChanges}
+        onRunNextStep={(operationId) => {
+          void runNextPathChangeStep(operationId);
+        }}
+        onRetryStep={retryPathChangeStep}
         selectedNoteLinks={selectedResolvedNoteLinks?.links ?? []}
         selectedNoteBacklinks={selectedResolvedNoteLinks?.backlinks ?? []}
         noteTitlesById={noteTitlesById}
       />
-      {isDevelopmentMode && isPathChangeQueueVisible ? (
-        <PathChangeQueue
-          operations={pathChangeOperations}
-          runningOperationIds={runningOperationIds}
-          onClearCompletedOperations={clearCompletedPathChanges}
-          onRunNextStep={(operationId) => {
-            void runNextPathChangeStep(operationId);
-          }}
-          onRetryStep={retryPathChangeStep}
-        />
-      ) : null}
     </section>
   );
 }
