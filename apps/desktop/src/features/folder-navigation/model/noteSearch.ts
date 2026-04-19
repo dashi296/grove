@@ -6,6 +6,7 @@ export type SearchableFolderNavigationNote = {
   title: string;
   path: NoteFilePath;
   content: string;
+  tags: readonly string[];
   updatedLabel: string;
 };
 
