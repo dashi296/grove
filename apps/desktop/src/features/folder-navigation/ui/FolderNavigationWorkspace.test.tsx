@@ -139,14 +139,24 @@ describe("ActivePane", () => {
   }
 
   it("shows resolved links, unresolved references, and backlinks in the note pane", () => {
-    const markup = renderActivePaneMarkup();
+    const markup = renderActivePaneMarkup({ initialDetailsOpen: true });
 
     expect(markup).toContain("Links");
     expect(markup).toContain("Backlinks");
+    expect(markup).toContain("Path");
     expect(markup).toContain("Research");
     expect(markup).toContain("Untriaged -&gt; Missing");
     expect(markup).toContain("Review via Project plan");
     expect(markup).toContain("Unresolved");
+  });
+
+  it("hides path, links, and backlinks by default", () => {
+    const markup = renderActivePaneMarkup();
+
+    expect(markup).toContain("Details");
+    expect(markup).not.toContain("Path");
+    expect(markup).not.toContain("Links");
+    expect(markup).not.toContain("Backlinks");
   });
 
   it("hides move, rename, and delete controls by default", () => {
@@ -187,6 +197,7 @@ describe("ActivePane", () => {
     });
 
     expect(markup).not.toContain("Note actions");
+    expect(markup).not.toContain("Details");
     expect(markup).toContain("Folder actions");
   });
 });
