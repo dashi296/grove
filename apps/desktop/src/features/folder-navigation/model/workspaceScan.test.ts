@@ -9,6 +9,7 @@ describe("mapScannedMarkdownNotes", () => {
         {
           path: "Projects\\Grove//Plan.md",
           title: " Workspace plan ",
+          content: "# Workspace plan",
           updatedAtUnixMs: Date.UTC(2026, 3, 15),
         },
       ]),
@@ -17,6 +18,7 @@ describe("mapScannedMarkdownNotes", () => {
         id: "Projects/Grove/Plan.md",
         path: "Projects/Grove/Plan.md",
         title: "Workspace plan",
+        content: "# Workspace plan",
         updatedLabel: "Apr 15",
       },
     ]);
@@ -28,6 +30,7 @@ describe("mapScannedMarkdownNotes", () => {
         {
           path: "Inbox.md",
           title: " ",
+          content: "",
           updatedAtUnixMs: Date.UTC(2026, 0, 2),
         },
       ]),
@@ -45,6 +48,7 @@ describe("mapScannedMarkdownNotes", () => {
         {
           path: "/Users/me/Notes/Plan.md",
           title: "Plan",
+          content: "",
           updatedAtUnixMs: Date.UTC(2026, 3, 15),
         },
       ]),

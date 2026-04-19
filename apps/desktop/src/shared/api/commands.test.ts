@@ -61,6 +61,7 @@ describe("desktop command wrappers", () => {
       {
         path: "Projects/Grove/Plan.md",
         title: "Workspace plan",
+        content: "# Workspace plan\n\nDraft",
         updatedAtUnixMs: 1776265200000,
       },
     ]);
@@ -69,6 +70,7 @@ describe("desktop command wrappers", () => {
       {
         path: "Projects/Grove/Plan.md",
         title: "Workspace plan",
+        content: "# Workspace plan\n\nDraft",
         updatedAtUnixMs: 1776265200000,
       },
     ]);
@@ -79,6 +81,7 @@ describe("desktop command wrappers", () => {
     invokeMock.mockResolvedValue({
       path: "Projects/Grove/Plan.md",
       title: "Plan",
+      content: "",
       updatedAtUnixMs: 1776265200000,
     });
 
@@ -90,6 +93,7 @@ describe("desktop command wrappers", () => {
     ).resolves.toStrictEqual({
       path: "Projects/Grove/Plan.md",
       title: "Plan",
+      content: "",
       updatedAtUnixMs: 1776265200000,
     });
     expect(invokeMock).toHaveBeenCalledWith("create_markdown_note", {
@@ -117,6 +121,7 @@ describe("desktop command wrappers", () => {
     invokeMock.mockResolvedValue({
       path: "Projects/Grove/Plan.md",
       title: "Workspace plan",
+      content: "# Workspace plan\n\nSaved",
       updatedAtUnixMs: 1776265200000,
     });
 
@@ -128,6 +133,7 @@ describe("desktop command wrappers", () => {
     ).resolves.toStrictEqual({
       path: "Projects/Grove/Plan.md",
       title: "Workspace plan",
+      content: "# Workspace plan\n\nSaved",
       updatedAtUnixMs: 1776265200000,
     });
     expect(invokeMock).toHaveBeenCalledWith("write_markdown_note", {
@@ -180,6 +186,7 @@ describe("desktop command wrappers", () => {
       {
         path: "Projects/Grove/Plan.md",
         title: "Plan",
+        content: "",
         updatedAtUnixMs: Number.POSITIVE_INFINITY,
       },
     ]);
