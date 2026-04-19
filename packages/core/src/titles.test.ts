@@ -28,7 +28,9 @@ describe("deriveNoteTitle", () => {
   });
 
   it("falls back to the file stem when the content has no explicit title", () => {
-    expect(deriveNoteTitle(normalizeNoteFilePath("Projects/Grove/Daily Plan.md"), "Body")).toStrictEqual({
+    expect(
+      deriveNoteTitle(normalizeNoteFilePath("Projects/Grove/Daily Plan.md"), "Body"),
+    ).toStrictEqual({
       title: "Daily Plan",
       source: "file-stem",
     });
@@ -37,9 +39,9 @@ describe("deriveNoteTitle", () => {
 
 describe("renameNoteFilePath", () => {
   it("renames a note inside its existing folder", () => {
-    expect(
-      renameNoteFilePath(normalizeNoteFilePath("Projects/Grove/Plan.md"), "Roadmap", []),
-    ).toBe("Projects/Grove/Roadmap.md");
+    expect(renameNoteFilePath(normalizeNoteFilePath("Projects/Grove/Plan.md"), "Roadmap", [])).toBe(
+      "Projects/Grove/Roadmap.md",
+    );
   });
 
   it("sanitizes the title before producing the next Markdown path", () => {

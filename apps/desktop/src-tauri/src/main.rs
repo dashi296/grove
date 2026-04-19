@@ -44,6 +44,12 @@ struct WriteMarkdownNoteRequest {
     content: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteMarkdownNoteRequest {
+    path: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum IndexRefreshReason {
@@ -51,6 +57,7 @@ enum IndexRefreshReason {
     FolderRename,
     NoteSave,
     NoteCreate,
+    NoteDelete,
 }
 
 #[derive(Debug, Serialize)]
@@ -189,10 +196,24 @@ async fn write_markdown_note(
         .map_err(|error| CommandError::new("note_write_failed", error.to_string()))
 }
 
+#[tauri::command]
+async fn delete_markdown_note(
+    app_handle: tauri::AppHandle,
+    note: DeleteMarkdownNoteRequest,
+) -> Result<(), CommandError> {
+    let workspace_root = default_workspace_root(&app_handle)?;
+    let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
+
+    delete_markdown_file(&note_path)
+        .await
+        .map_err(|error| CommandError::new("note_delete_failed", error.to_string()))
+}
+
 fn main() {
     if let Err(error) = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             create_markdown_note,
+            delete_markdown_note,
             move_markdown_file,
             read_markdown_note,
             refresh_note_indexes,
@@ -382,6 +403,11 @@ async fn write_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> 
     }
 
     write_result
+}
+
+async fn delete_markdown_file(path: &Path) -> anyhow::Result<()> {
+    tokio::fs::remove_file(path).await?;
+    Ok(())
 }
 
 async fn create_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()> {
@@ -648,7 +674,7 @@ mod tests {
     };
 
     use super::{
-        create_markdown_file, derive_markdown_title, find_first_markdown_heading,
+        create_markdown_file, delete_markdown_file, derive_markdown_title, find_first_markdown_heading,
         get_temporary_write_path,
         get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
         scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
@@ -835,6 +861,23 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("Markdown write should succeed");
+    }
+
+    #[test]
+    fn deletes_markdown_files() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("deletes-markdown-files");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+            tokio::fs::create_dir_all(note_path.parent().expect("note parent")).await?;
+            tokio::fs::write(&note_path, "# Plan").await?;
+
+            delete_markdown_file(&note_path).await?;
+
+            assert!(!tokio::fs::try_exists(&note_path).await?);
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("Markdown delete should succeed");
     }
 
     #[test]

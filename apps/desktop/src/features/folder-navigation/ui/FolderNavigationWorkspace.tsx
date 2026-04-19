@@ -14,6 +14,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import {
   createMarkdownNote,
+  deleteMarkdownNote,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -21,8 +22,10 @@ import {
   writeMarkdownNote,
 } from "../../../shared";
 import {
+  deleteNoteFromFolderWorkspace,
   getFailedOperationSteps,
   getNextPendingOperationStep,
+  getNextSelectedNoteIdAfterDelete,
   isDescendantFolderPath,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
@@ -107,12 +110,14 @@ type ActivePaneProps = {
   noteEditBuffer: NoteEditBuffer | null;
   editorLoadState: NoteEditorLoadState;
   editorNotice: string | null;
+  deleteState: NoteDeleteState;
   onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onEditContent: (content: string) => void;
   onSaveDraft: () => void;
   saveBlockedReason: string | null;
   onDiscardDraft: () => void;
+  onDeleteSelectedNote: () => void;
 };
 
 type MoveNoteControlProps = {
@@ -148,6 +153,11 @@ type NoteCreateState = {
 
 type NoteEditorLoadState = {
   status: "idle" | "loading";
+};
+
+type NoteDeleteState = {
+  status: "idle" | "deleting" | "failed";
+  errorMessage: string | null;
 };
 
 type NoteEditorProps = {
@@ -258,6 +268,10 @@ function getNoteSaveErrorMessage(error: unknown): string {
 
 function getNoteCreateErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be created.";
+}
+
+function getNoteDeleteErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "The Markdown note could not be deleted.";
 }
 
 function getNoteIndexRefreshErrorMessage(error: unknown): string {
@@ -721,12 +735,14 @@ function ActivePane({
   noteEditBuffer,
   editorLoadState,
   editorNotice,
+  deleteState,
   onMoveSelectedNote,
   onRenameSelectedFolder,
   onEditContent,
   onSaveDraft,
   saveBlockedReason,
   onDiscardDraft,
+  onDeleteSelectedNote,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
@@ -759,6 +775,22 @@ function ActivePane({
               onMoveSelectedNote={onMoveSelectedNote}
               onOperationMessage={setOperationMessage}
             />
+            <div className="folder-navigation__operation">
+              <button
+                type="button"
+                className="folder-navigation__secondary-action"
+                onClick={onDeleteSelectedNote}
+                disabled={deleteState.status === "deleting"}
+              >
+                {deleteState.status === "deleting" ? "Deleting" : "Delete note"}
+              </button>
+              <p className="folder-navigation__muted">
+                Permanently deletes the Markdown file from this workspace.
+              </p>
+              {deleteState.errorMessage === null ? null : (
+                <p className="folder-navigation__step-error">{deleteState.errorMessage}</p>
+              )}
+            </div>
           </>
         )}
         <RenameFolderControl
@@ -889,6 +921,10 @@ export function FolderNavigationWorkspace() {
     status: "idle",
     errorMessage: null,
   });
+  const [deleteState, setDeleteState] = useState<NoteDeleteState>({
+    status: "idle",
+    errorMessage: null,
+  });
   const [scanState, setScanState] = useState<WorkspaceScanState>({
     status: "loading",
     errorMessage: null,
@@ -966,6 +1002,9 @@ export function FolderNavigationWorkspace() {
     }
 
     setEditorNotice(null);
+    if (deleteState.errorMessage !== null) {
+      setDeleteState({ status: "idle", errorMessage: null });
+    }
     setSelectedNoteId(noteId);
   }
 
@@ -1013,6 +1052,73 @@ export function FolderNavigationWorkspace() {
     });
     setEditorNotice(null);
   }
+
+  const deleteSelectedNote = useCallback(async (): Promise<void> => {
+    const note = selectedNote;
+
+    if (note === undefined || deleteState.status === "deleting") {
+      return;
+    }
+
+    if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
+      setDeleteState({
+        status: "failed",
+        errorMessage: "Save or discard the current draft before deleting a note.",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete "${note.title}" permanently from this workspace? This removes the Markdown file.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteState({
+      status: "deleting",
+      errorMessage: null,
+    });
+    setEditorNotice(null);
+
+    try {
+      await deleteMarkdownNote({ path: note.path });
+
+      const mutation = deleteNoteFromFolderWorkspace(workspaceState, note.id);
+      const nextSelectedNoteId = getNextSelectedNoteIdAfterDelete(notes, note.id, selectedNoteId);
+
+      applyWorkspaceState(mutation.state);
+      setSelectedNoteId(nextSelectedNoteId);
+      setNoteEditBuffer((currentBuffer) => {
+        if (currentBuffer?.noteId !== note.id) {
+          return currentBuffer;
+        }
+
+        return null;
+      });
+      setDeleteState({
+        status: "idle",
+        errorMessage: null,
+      });
+
+      try {
+        await refreshNoteIndexes({
+          noteIds: [note.id],
+          reason: "note-delete",
+        });
+      } catch (error) {
+        setEditorNotice(
+          `Deleted, but index refresh failed: ${getNoteIndexRefreshErrorMessage(error)}`,
+        );
+      }
+    } catch (error) {
+      setDeleteState({
+        status: "failed",
+        errorMessage: getNoteDeleteErrorMessage(error),
+      });
+    }
+  }, [deleteState.status, noteEditBuffer, notes, selectedNote, selectedNoteId, workspaceState]);
 
   const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
     if (scanState.status !== "ready" || createState.status === "creating") {
@@ -1206,6 +1312,10 @@ export function FolderNavigationWorkspace() {
           status: "idle",
           errorMessage: null,
         });
+        setDeleteState({
+          status: "idle",
+          errorMessage: null,
+        });
       } catch (error) {
         if (canceled) {
           return;
@@ -1353,6 +1463,7 @@ export function FolderNavigationWorkspace() {
         noteEditBuffer={noteEditBuffer}
         editorLoadState={editorLoadState}
         editorNotice={editorNotice}
+        deleteState={deleteState}
         onMoveSelectedNote={moveSelectedNote}
         onRenameSelectedFolder={renameSelectedFolder}
         onEditContent={editSelectedNoteContent}
@@ -1361,6 +1472,9 @@ export function FolderNavigationWorkspace() {
         }}
         saveBlockedReason={saveBlockedReason}
         onDiscardDraft={discardSelectedDraft}
+        onDeleteSelectedNote={() => {
+          void deleteSelectedNote();
+        }}
       />
       <PathChangeQueue
         operations={pathChangeOperations}

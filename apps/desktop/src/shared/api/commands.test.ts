@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createMarkdownNote,
+  deleteMarkdownNote,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -133,6 +134,18 @@ describe("desktop command wrappers", () => {
       note: {
         path: "Projects/Grove/Plan.md",
         content: "# Workspace plan\n\nSaved",
+      },
+    });
+  });
+
+  it("invokes the Markdown note delete command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await deleteMarkdownNote({ path: "Projects/Grove/Plan.md" });
+
+    expect(invokeMock).toHaveBeenCalledWith("delete_markdown_note", {
+      note: {
+        path: "Projects/Grove/Plan.md",
       },
     });
   });

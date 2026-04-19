@@ -6,9 +6,11 @@ import {
   clearCompletedPathChangeOperations,
   completeNextOperationStep,
   createPathChangeOperation,
+  deleteNoteFromFolderWorkspace,
   failNextOperationStep,
   getFailedOperationSteps,
   getNextPendingOperationStep,
+  getNextSelectedNoteIdAfterDelete,
   getNextRunnablePathChangeOperationId,
   isPathChangeOperationComplete,
   moveNoteInFolderWorkspace,
@@ -108,6 +110,63 @@ describe("moveNoteInFolderWorkspace", () => {
         normalizeFolderPath("Reading"),
       ),
     ).toThrow("target Markdown path");
+  });
+});
+
+describe("deleteNoteFromFolderWorkspace", () => {
+  it("removes the selected note and queues a delete refresh", () => {
+    const result = deleteNoteFromFolderWorkspace(workspaceState, "note-plan");
+
+    expect(result.affectedNoteIds).toStrictEqual(["note-plan"]);
+    expect(result.indexRefresh).toStrictEqual({
+      noteIds: ["note-plan"],
+      reason: "note-delete",
+    });
+    expect(result.pathChanges).toStrictEqual([]);
+    expect(result.state.notes.map((note) => note.id)).toStrictEqual(["note-root", "note-research"]);
+    expect(result.state.selectedFolderPath).toBe("Projects/Grove");
+  });
+
+  it("clears a stale selected folder when its last note is deleted", () => {
+    const result = deleteNoteFromFolderWorkspace(
+      {
+        ...workspaceState,
+        notes: workspaceState.notes.filter((note) => note.id !== "note-root"),
+        selectedFolderPath: normalizeFolderPath("Projects/Grove/Research"),
+      },
+      "note-research",
+    );
+
+    expect(result.state.notes.map((note) => note.id)).toStrictEqual(["note-plan"]);
+    expect(result.state.selectedFolderPath).toBe(null);
+  });
+
+  it("rejects unknown note ids", () => {
+    expect(() => deleteNoteFromFolderWorkspace(workspaceState, "missing-note")).toThrow(
+      "Choose an existing note",
+    );
+  });
+});
+
+describe("getNextSelectedNoteIdAfterDelete", () => {
+  it("selects the next note when the active note is deleted", () => {
+    expect(getNextSelectedNoteIdAfterDelete(workspaceState.notes, "note-plan", "note-plan")).toBe(
+      "note-research",
+    );
+  });
+
+  it("keeps the current selection when a different note is deleted", () => {
+    expect(getNextSelectedNoteIdAfterDelete(workspaceState.notes, "note-root", "note-plan")).toBe(
+      "note-plan",
+    );
+  });
+
+  it("clears the selection when the last note is deleted", () => {
+    const onlyRootNote = [workspaceState.notes[0]].flatMap((note) =>
+      note === undefined ? [] : [note],
+    );
+
+    expect(getNextSelectedNoteIdAfterDelete(onlyRootNote, "note-root", "note-root")).toBe("");
   });
 });
 
