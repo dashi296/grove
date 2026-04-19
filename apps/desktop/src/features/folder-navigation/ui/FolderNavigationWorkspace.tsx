@@ -9,7 +9,8 @@ import {
   normalizeFolderScope,
 } from "@grove/core";
 import type { FolderScope, FolderTreeNode } from "@grove/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MarkdownCommand, MarkdownSelection } from "@grove/editor";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   createMarkdownNote,
@@ -29,6 +30,7 @@ import {
   renameFolderInWorkspace,
 } from "../model/folderWorkspaceState";
 import { createDesktopPathChangeExecutor } from "../model/folderPathChangeExecutor";
+import { dispatchMarkdownEditorCommand } from "../model/markdownEditor";
 import { createNewNotePath } from "../model/noteCreation";
 import {
   canSaveNoteEditBuffer,
@@ -263,6 +265,14 @@ function getNoteIndexRefreshErrorMessage(error: unknown): string {
 }
 
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
+
+const markdownToolbarCommands: readonly { command: MarkdownCommand; label: string }[] = [
+  { command: "bold", label: "Bold" },
+  { command: "italic", label: "Italic" },
+  { command: "heading", label: "Heading" },
+  { command: "link", label: "Link" },
+  { command: "code", label: "Code" },
+];
 
 function WorkspaceScanBanner({ scanState }: { scanState: WorkspaceScanState }) {
   if (scanState.status === "loading") {
@@ -593,6 +603,22 @@ function NoteEditor({
   saveBlockedReason,
   onDiscardDraft,
 }: NoteEditorProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingSelectionRef = useRef<MarkdownSelection | null>(null);
+
+  useLayoutEffect(() => {
+    const pendingSelection = pendingSelectionRef.current;
+    const textarea = textareaRef.current;
+
+    if (pendingSelection === null || textarea === null) {
+      return;
+    }
+
+    textarea.setSelectionRange(pendingSelection.start, pendingSelection.end);
+    textarea.focus();
+    pendingSelectionRef.current = null;
+  }, [noteEditBuffer?.draftContent]);
+
   if (selectedNote === undefined) {
     return <p>Select a note to edit its Markdown content.</p>;
   }
@@ -603,6 +629,28 @@ function NoteEditor({
 
   if (noteEditBuffer === null || noteEditBuffer.noteId !== selectedNote.id) {
     return <p className="folder-navigation__muted">Markdown content is not loaded.</p>;
+  }
+
+  const editorDisabled = noteEditBuffer.status === "error" || noteEditBuffer.status === "saving";
+
+  function dispatchMarkdownCommand(command: MarkdownCommand): void {
+    const textarea = textareaRef.current;
+
+    if (textarea === null || noteEditBuffer === null) {
+      return;
+    }
+
+    const result = dispatchMarkdownEditorCommand({
+      content: noteEditBuffer.draftContent,
+      selection: {
+        start: textarea.selectionStart,
+        end: textarea.selectionEnd,
+      },
+      command,
+    });
+
+    pendingSelectionRef.current = result.selection;
+    onEditContent(result.content);
   }
 
   return (
@@ -630,6 +678,19 @@ function NoteEditor({
           Discard draft
         </button>
       </div>
+      <div className="folder-navigation__markdown-toolbar" aria-label="Markdown formatting">
+        {markdownToolbarCommands.map((item) => (
+          <button
+            key={item.command}
+            type="button"
+            className="folder-navigation__format-action"
+            onClick={() => dispatchMarkdownCommand(item.command)}
+            disabled={editorDisabled}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
       {noteEditBuffer.errorMessage === null ? null : (
         <p className="folder-navigation__step-error">{noteEditBuffer.errorMessage}</p>
       )}
@@ -640,10 +701,11 @@ function NoteEditor({
         <p className="folder-navigation__step-error">{saveBlockedReason}</p>
       )}
       <textarea
+        ref={textareaRef}
         className="folder-navigation__textarea"
         value={noteEditBuffer.draftContent}
         onChange={(event) => onEditContent(event.target.value)}
-        disabled={noteEditBuffer.status === "error" || noteEditBuffer.status === "saving"}
+        disabled={editorDisabled}
         aria-label={`Markdown content for ${selectedNote.title}`}
       />
     </div>

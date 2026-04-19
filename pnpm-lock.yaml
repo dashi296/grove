@@ -32,6 +32,9 @@ importers:
       '@grove/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@grove/editor':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@grove/plugin-api':
         specifier: workspace:*
         version: link:../../packages/plugin-api
