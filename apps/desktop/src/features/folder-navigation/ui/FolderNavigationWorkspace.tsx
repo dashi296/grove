@@ -134,6 +134,7 @@ type ActivePaneProps = {
   selectedNoteLinks: readonly ResolvedWikiLink[];
   selectedNoteBacklinks: readonly ResolvedWikiLink[];
   noteTitlesById: ReadonlyMap<string, string>;
+  initialDetailsOpen?: boolean;
   initialNoteActionsOpen?: boolean;
   initialFolderActionsOpen?: boolean;
 };
@@ -907,11 +908,14 @@ export function ActivePane({
   selectedNoteLinks,
   selectedNoteBacklinks,
   noteTitlesById,
+  initialDetailsOpen = false,
   initialNoteActionsOpen = false,
   initialFolderActionsOpen = false,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
-  const [operationMessage, setOperationMessage] = useState<string>(defaultOperationMessage);
+  const [noteOperationMessage, setNoteOperationMessage] = useState<string>(defaultOperationMessage);
+  const [folderOperationMessage, setFolderOperationMessage] =
+    useState<string>(defaultOperationMessage);
 
   return (
     <section className="folder-navigation__pane">
@@ -935,7 +939,6 @@ export function ActivePane({
           <p>Select a note to manage its workspace path.</p>
         ) : (
           <>
-            <p>Path: {selectedNote.path}</p>
             <NoteEditor
               selectedNote={selectedNote}
               noteEditBuffer={noteEditBuffer}
@@ -946,22 +949,30 @@ export function ActivePane({
               saveBlockedReason={saveBlockedReason}
               onDiscardDraft={onDiscardDraft}
             />
-            <div className="folder-navigation__link-sections">
-              <NoteLinkList
-                kind="outgoing"
-                heading="Links"
-                emptyMessage="No WikiLinks in this note yet."
-                links={selectedNoteLinks}
-                noteTitlesById={noteTitlesById}
-              />
-              <NoteLinkList
-                kind="backlinks"
-                heading="Backlinks"
-                emptyMessage="No backlinks point to this note yet."
-                links={selectedNoteBacklinks}
-                noteTitlesById={noteTitlesById}
-              />
-            </div>
+            <ActionDisclosure title="Details" initiallyOpen={initialDetailsOpen}>
+              <div className="folder-navigation__details">
+                <div className="folder-navigation__detail-block">
+                  <p className="folder-navigation__link-heading">Path</p>
+                  <p className="folder-navigation__path-value">{selectedNote.path}</p>
+                </div>
+                <div className="folder-navigation__link-sections">
+                  <NoteLinkList
+                    kind="outgoing"
+                    heading="Links"
+                    emptyMessage="No WikiLinks in this note yet."
+                    links={selectedNoteLinks}
+                    noteTitlesById={noteTitlesById}
+                  />
+                  <NoteLinkList
+                    kind="backlinks"
+                    heading="Backlinks"
+                    emptyMessage="No backlinks point to this note yet."
+                    links={selectedNoteBacklinks}
+                    noteTitlesById={noteTitlesById}
+                  />
+                </div>
+              </div>
+            </ActionDisclosure>
           </>
         )}
         {selectedNote === undefined ? null : (
@@ -970,7 +981,7 @@ export function ActivePane({
               folderOptions={folderOptions}
               selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
               onMoveSelectedNote={onMoveSelectedNote}
-              onOperationMessage={setOperationMessage}
+              onOperationMessage={setNoteOperationMessage}
             />
             <div className="folder-navigation__operation">
               <button
@@ -991,6 +1002,7 @@ export function ActivePane({
                 <p className="folder-navigation__step-error">{deleteState.errorMessage}</p>
               )}
             </div>
+            <p className="folder-navigation__muted">{noteOperationMessage}</p>
           </ActionDisclosure>
         )}
         {isDevelopmentMode && isPathChangeQueueVisible ? (
@@ -1006,9 +1018,9 @@ export function ActivePane({
           <RenameFolderControl
             selectedFolderPath={selectedFolderPath}
             onRenameSelectedFolder={onRenameSelectedFolder}
-            onOperationMessage={setOperationMessage}
+            onOperationMessage={setFolderOperationMessage}
           />
-          <p className="folder-navigation__muted">{operationMessage}</p>
+          <p className="folder-navigation__muted">{folderOperationMessage}</p>
         </ActionDisclosure>
       </div>
     </section>
