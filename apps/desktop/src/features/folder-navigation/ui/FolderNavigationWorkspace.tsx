@@ -143,7 +143,8 @@ type PathChangeQueueProps = {
 };
 
 type FolderNavigationWorkspaceContentProps = {
-  showPathChangeQueue: boolean;
+  isDevelopmentMode: boolean;
+  initialPathChangeQueueVisibility?: boolean;
 };
 
 type WorkspaceScanState = {
@@ -933,8 +934,12 @@ export function getFolderNavigationWorkspaceClassName(showPathChangeQueue: boole
 }
 
 export function FolderNavigationWorkspaceContent({
-  showPathChangeQueue,
+  isDevelopmentMode,
+  initialPathChangeQueueVisibility = false,
 }: FolderNavigationWorkspaceContentProps) {
+  const [isPathChangeQueueVisible, setIsPathChangeQueueVisible] = useState(
+    initialPathChangeQueueVisibility,
+  );
   const [workspaceState, setWorkspaceState] = useState<FolderWorkspaceState>(initialWorkspaceState);
   const [selectedNoteId, setSelectedNoteId] = useState<string>("");
   const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
@@ -1477,7 +1482,9 @@ export function FolderNavigationWorkspaceContent({
   }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
 
   return (
-    <section className={getFolderNavigationWorkspaceClassName(showPathChangeQueue)}>
+    <section
+      className={getFolderNavigationWorkspaceClassName(isDevelopmentMode && isPathChangeQueueVisible)}
+    >
       <Sidebar
         noteCount={notes.length}
         folderTree={folderTree}
@@ -1526,7 +1533,18 @@ export function FolderNavigationWorkspaceContent({
           void deleteSelectedNote();
         }}
       />
-      {showPathChangeQueue ? (
+      {isDevelopmentMode ? (
+        <button
+          type="button"
+          className="folder-navigation__queue-toggle"
+          onClick={() => {
+            setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
+          }}
+        >
+          {isPathChangeQueueVisible ? "Hide path change diagnostics" : "Show path change diagnostics"}
+        </button>
+      ) : null}
+      {isDevelopmentMode && isPathChangeQueueVisible ? (
         <PathChangeQueue
           operations={pathChangeOperations}
           runningOperationIds={runningOperationIds}
@@ -1542,5 +1560,5 @@ export function FolderNavigationWorkspaceContent({
 }
 
 export function FolderNavigationWorkspace() {
-  return <FolderNavigationWorkspaceContent showPathChangeQueue={import.meta.env.DEV} />;
+  return <FolderNavigationWorkspaceContent isDevelopmentMode={import.meta.env.DEV} />;
 }

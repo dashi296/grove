@@ -21,21 +21,38 @@ describe("getFolderNavigationWorkspaceClassName", () => {
 });
 
 describe("FolderNavigationWorkspaceContent", () => {
-  it("renders the path change queue in development mode", () => {
+  it("hides the path change queue by default in development mode and shows the toggle", () => {
     const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent showPathChangeQueue={true} />,
+      <FolderNavigationWorkspaceContent isDevelopmentMode={true} />,
     );
 
+    expect(markup).toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Pending path changes");
+    expect(markup).not.toContain("Path change queue");
+    expect(markup).toContain("folder-navigation--without-queue");
+  });
+
+  it("renders the path change queue when development diagnostics are expanded", () => {
+    const markup = renderToStaticMarkup(
+      <FolderNavigationWorkspaceContent
+        isDevelopmentMode={true}
+        initialPathChangeQueueVisibility={true}
+      />,
+    );
+
+    expect(markup).toContain("Hide path change diagnostics");
     expect(markup).toContain("Pending path changes");
     expect(markup).toContain("Path change queue");
     expect(markup).toContain("folder-navigation--with-queue");
   });
 
-  it("hides the path change queue in production mode", () => {
+  it("hides both the queue and the diagnostics toggle in production mode", () => {
     const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent showPathChangeQueue={false} />,
+      <FolderNavigationWorkspaceContent isDevelopmentMode={false} />,
     );
 
+    expect(markup).not.toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Hide path change diagnostics");
     expect(markup).not.toContain("Pending path changes");
     expect(markup).not.toContain("Path change queue");
     expect(markup).toContain("folder-navigation--without-queue");
