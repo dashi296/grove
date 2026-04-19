@@ -174,6 +174,9 @@ describe("ActivePane", () => {
 
     expect(markup).toContain("Move selected note");
     expect(markup).toContain("Delete note");
+    expect(markup).toContain(
+      "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
+    );
   });
 
   it("shows folder actions when the folder disclosure starts open", () => {

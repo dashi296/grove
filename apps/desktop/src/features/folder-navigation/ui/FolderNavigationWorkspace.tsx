@@ -913,7 +913,9 @@ export function ActivePane({
   initialFolderActionsOpen = false,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
-  const [operationMessage, setOperationMessage] = useState<string>(defaultOperationMessage);
+  const [noteOperationMessage, setNoteOperationMessage] = useState<string>(defaultOperationMessage);
+  const [folderOperationMessage, setFolderOperationMessage] =
+    useState<string>(defaultOperationMessage);
 
   return (
     <section className="folder-navigation__pane">
@@ -979,7 +981,7 @@ export function ActivePane({
               folderOptions={folderOptions}
               selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
               onMoveSelectedNote={onMoveSelectedNote}
-              onOperationMessage={setOperationMessage}
+              onOperationMessage={setNoteOperationMessage}
             />
             <div className="folder-navigation__operation">
               <button
@@ -1000,6 +1002,7 @@ export function ActivePane({
                 <p className="folder-navigation__step-error">{deleteState.errorMessage}</p>
               )}
             </div>
+            <p className="folder-navigation__muted">{noteOperationMessage}</p>
           </ActionDisclosure>
         )}
         {isDevelopmentMode && isPathChangeQueueVisible ? (
@@ -1015,9 +1018,9 @@ export function ActivePane({
           <RenameFolderControl
             selectedFolderPath={selectedFolderPath}
             onRenameSelectedFolder={onRenameSelectedFolder}
-            onOperationMessage={setOperationMessage}
+            onOperationMessage={setFolderOperationMessage}
           />
-          <p className="folder-navigation__muted">{operationMessage}</p>
+          <p className="folder-navigation__muted">{folderOperationMessage}</p>
         </ActionDisclosure>
       </div>
     </section>
