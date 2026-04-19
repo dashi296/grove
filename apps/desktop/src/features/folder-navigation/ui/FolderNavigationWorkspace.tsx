@@ -935,6 +935,7 @@ export function FolderNavigationWorkspace() {
     errorMessage: null,
   });
   const savingNoteIdSet = useRef(new Set<string>());
+  const selectedNoteIdRef = useRef(selectedNoteId);
   const {
     pathChangeOperations,
     runningOperationIds,
@@ -969,6 +970,10 @@ export function FolderNavigationWorkspace() {
     selectedNote === undefined || !isNoteAffectedByPathChange(pathChangeOperations, selectedNote.id)
       ? null
       : "Delete is unavailable while this note has unfinished path changes.";
+
+  useEffect(() => {
+    selectedNoteIdRef.current = selectedNoteId;
+  }, [selectedNoteId]);
 
   function applyWorkspaceState(nextState: FolderWorkspaceState): void {
     setWorkspaceState(reconcileFolderWorkspaceState(nextState));
@@ -1108,7 +1113,7 @@ export function FolderNavigationWorkspace() {
         const deleteMutation = deleteSelectedNoteFromFolderWorkspace(
           currentState,
           note.id,
-          selectedNoteId,
+          selectedNoteIdRef.current,
         );
 
         nextSelectedNoteId = deleteMutation.nextSelectedNoteId;
@@ -1143,7 +1148,7 @@ export function FolderNavigationWorkspace() {
         errorMessage: getNoteDeleteErrorMessage(error),
       });
     }
-  }, [deleteState.status, noteEditBuffer, pathChangeOperations, selectedNote, selectedNoteId]);
+  }, [deleteState.status, noteEditBuffer, pathChangeOperations, selectedNote]);
 
   const createNoteInSelectedFolder = useCallback(async (): Promise<void> => {
     if (scanState.status !== "ready" || createState.status === "creating") {
