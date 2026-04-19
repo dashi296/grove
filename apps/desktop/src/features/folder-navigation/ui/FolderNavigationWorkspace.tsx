@@ -12,6 +12,7 @@ import {
 import type { FolderScope, FolderTreeNode, ResolvedWikiLink } from "@grove/core";
 import type { MarkdownCommand, MarkdownSelection } from "@grove/editor";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   createMarkdownNote,
@@ -133,6 +134,8 @@ type ActivePaneProps = {
   selectedNoteLinks: readonly ResolvedWikiLink[];
   selectedNoteBacklinks: readonly ResolvedWikiLink[];
   noteTitlesById: ReadonlyMap<string, string>;
+  initialNoteActionsOpen?: boolean;
+  initialFolderActionsOpen?: boolean;
 };
 
 type MoveNoteControlProps = {
@@ -332,6 +335,8 @@ function getNoteIndexRefreshErrorMessage(error: unknown): string {
 }
 
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
+const defaultOperationMessage =
+  "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.";
 
 const markdownToolbarCommands: readonly { command: MarkdownCommand; label: string }[] = [
   { command: "bold", label: "Bold" },
@@ -849,6 +854,31 @@ function NoteLinkList({ kind, heading, emptyMessage, links, noteTitlesById }: No
   );
 }
 
+type ActionDisclosureProps = {
+  title: string;
+  initiallyOpen?: boolean;
+  children: ReactNode;
+};
+
+function ActionDisclosure({ title, initiallyOpen = false, children }: ActionDisclosureProps) {
+  const [isOpen, setIsOpen] = useState(initiallyOpen);
+
+  return (
+    <section className="folder-navigation__disclosure">
+      <button
+        type="button"
+        className="folder-navigation__disclosure-toggle"
+        onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
+        aria-expanded={isOpen}
+      >
+        <span>{title}</span>
+        <span>{isOpen ? "Hide" : "Show"}</span>
+      </button>
+      {isOpen ? <div className="folder-navigation__disclosure-content">{children}</div> : null}
+    </section>
+  );
+}
+
 export function ActivePane({
   notes,
   folderOptions,
@@ -877,11 +907,11 @@ export function ActivePane({
   selectedNoteLinks,
   selectedNoteBacklinks,
   noteTitlesById,
+  initialNoteActionsOpen = false,
+  initialFolderActionsOpen = false,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
-  const [operationMessage, setOperationMessage] = useState<string>(
-    "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
-  );
+  const [operationMessage, setOperationMessage] = useState<string>(defaultOperationMessage);
 
   return (
     <section className="folder-navigation__pane">
@@ -932,6 +962,10 @@ export function ActivePane({
                 noteTitlesById={noteTitlesById}
               />
             </div>
+          </>
+        )}
+        {selectedNote === undefined ? null : (
+          <ActionDisclosure title="Note actions" initiallyOpen={initialNoteActionsOpen}>
             <MoveNoteControl
               folderOptions={folderOptions}
               selectedNoteFolderPath={getFolderPathForNote(selectedNote.path)}
@@ -957,7 +991,7 @@ export function ActivePane({
                 <p className="folder-navigation__step-error">{deleteState.errorMessage}</p>
               )}
             </div>
-          </>
+          </ActionDisclosure>
         )}
         {isDevelopmentMode && isPathChangeQueueVisible ? (
           <PathChangeQueue
@@ -968,12 +1002,14 @@ export function ActivePane({
             onRetryStep={onRetryStep}
           />
         ) : null}
-        <RenameFolderControl
-          selectedFolderPath={selectedFolderPath}
-          onRenameSelectedFolder={onRenameSelectedFolder}
-          onOperationMessage={setOperationMessage}
-        />
-        <p className="folder-navigation__muted">{operationMessage}</p>
+        <ActionDisclosure title="Folder actions" initiallyOpen={initialFolderActionsOpen}>
+          <RenameFolderControl
+            selectedFolderPath={selectedFolderPath}
+            onRenameSelectedFolder={onRenameSelectedFolder}
+            onOperationMessage={setOperationMessage}
+          />
+          <p className="folder-navigation__muted">{operationMessage}</p>
+        </ActionDisclosure>
       </div>
     </section>
   );

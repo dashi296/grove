@@ -1,4 +1,4 @@
-import { normalizeNoteFilePath } from "@grove/core";
+import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -58,8 +58,10 @@ describe("FolderNavigationWorkspaceContent", () => {
 });
 
 describe("ActivePane", () => {
-  it("shows resolved links, unresolved references, and backlinks in the note pane", () => {
-    const markup = renderToStaticMarkup(
+  function renderActivePaneMarkup(
+    overrides?: Partial<React.ComponentProps<typeof ActivePane>>,
+  ): string {
+    return renderToStaticMarkup(
       <ActivePane
         notes={[
           {
@@ -70,8 +72,10 @@ describe("ActivePane", () => {
             updatedLabel: "Apr 19",
           },
         ]}
-        folderOptions={[]}
-        selectedFolderPath={null}
+        folderOptions={[
+          { path: normalizeFolderPath("Projects/Grove"), label: "Projects/Grove" },
+        ]}
+        selectedFolderPath={normalizeFolderPath("Projects/Grove")}
         selectedNoteId="note-plan"
         noteEditBuffer={null}
         editorLoadState={{ status: "idle" }}
@@ -129,8 +133,13 @@ describe("ActivePane", () => {
             ["note-review", "Review"],
           ])
         }
+        {...overrides}
       />,
     );
+  }
+
+  it("shows resolved links, unresolved references, and backlinks in the note pane", () => {
+    const markup = renderActivePaneMarkup();
 
     expect(markup).toContain("Links");
     expect(markup).toContain("Backlinks");
@@ -138,5 +147,46 @@ describe("ActivePane", () => {
     expect(markup).toContain("Untriaged -&gt; Missing");
     expect(markup).toContain("Review via Project plan");
     expect(markup).toContain("Unresolved");
+  });
+
+  it("hides move, rename, and delete controls by default", () => {
+    const markup = renderActivePaneMarkup();
+
+    expect(markup).toContain("Note actions");
+    expect(markup).toContain("Folder actions");
+    expect(markup).not.toContain("Move selected note");
+    expect(markup).not.toContain("Rename selected folder");
+    expect(markup).not.toContain("Delete note");
+  });
+
+  it("shows note actions when the note disclosure starts open", () => {
+    const markup = renderActivePaneMarkup({ initialNoteActionsOpen: true });
+
+    expect(markup).toContain("Move selected note");
+    expect(markup).toContain("Delete note");
+  });
+
+  it("shows folder actions when the folder disclosure starts open", () => {
+    const markup = renderActivePaneMarkup({ initialFolderActionsOpen: true });
+
+    expect(markup).toContain("Rename selected folder");
+    expect(markup).toContain(
+      "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
+    );
+  });
+
+  it("hides note actions entirely when no note is selected", () => {
+    const markup = renderActivePaneMarkup({
+      notes: [],
+      folderOptions: [],
+      selectedFolderPath: null,
+      selectedNoteId: "",
+      selectedNoteLinks: [],
+      selectedNoteBacklinks: [],
+      noteTitlesById: new Map(),
+    });
+
+    expect(markup).not.toContain("Note actions");
+    expect(markup).toContain("Folder actions");
   });
 });
