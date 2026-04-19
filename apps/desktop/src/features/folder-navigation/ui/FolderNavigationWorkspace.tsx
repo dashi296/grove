@@ -684,6 +684,7 @@ function NoteEditor({
             key={item.command}
             type="button"
             className="folder-navigation__format-action"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => dispatchMarkdownCommand(item.command)}
             disabled={editorDisabled}
           >
