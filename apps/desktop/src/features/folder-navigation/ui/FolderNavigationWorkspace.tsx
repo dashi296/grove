@@ -119,6 +119,9 @@ type ActivePaneProps = {
   onDiscardDraft: () => void;
   deleteBlockedReason: string | null;
   onDeleteSelectedNote: () => void;
+  isDevelopmentMode: boolean;
+  isPathChangeQueueVisible: boolean;
+  onTogglePathChangeQueue: () => void;
 };
 
 type MoveNoteControlProps = {
@@ -757,6 +760,9 @@ function ActivePane({
   onDiscardDraft,
   deleteBlockedReason,
   onDeleteSelectedNote,
+  isDevelopmentMode,
+  isPathChangeQueueVisible,
+  onTogglePathChangeQueue,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
   const [operationMessage, setOperationMessage] = useState<string>(
@@ -766,7 +772,20 @@ function ActivePane({
   return (
     <section className="folder-navigation__pane">
       <p className="folder-navigation__eyebrow">Active pane</p>
-      <h2 className="folder-navigation__heading">{selectedNote?.title ?? "No note selected"}</h2>
+      <div className="folder-navigation__pane-heading">
+        <h2 className="folder-navigation__heading">{selectedNote?.title ?? "No note selected"}</h2>
+        {isDevelopmentMode ? (
+          <button
+            type="button"
+            className="folder-navigation__queue-toggle"
+            onClick={onTogglePathChangeQueue}
+          >
+            {isPathChangeQueueVisible
+              ? "Hide path change diagnostics"
+              : "Show path change diagnostics"}
+          </button>
+        ) : null}
+      </div>
       <div className="folder-navigation__editor">
         {selectedNote === undefined ? (
           <p>Select a note to manage its workspace path.</p>
@@ -1532,18 +1551,12 @@ export function FolderNavigationWorkspaceContent({
         onDeleteSelectedNote={() => {
           void deleteSelectedNote();
         }}
+        isDevelopmentMode={isDevelopmentMode}
+        isPathChangeQueueVisible={isPathChangeQueueVisible}
+        onTogglePathChangeQueue={() => {
+          setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
+        }}
       />
-      {isDevelopmentMode ? (
-        <button
-          type="button"
-          className="folder-navigation__queue-toggle"
-          onClick={() => {
-            setIsPathChangeQueueVisible((currentVisibility) => !currentVisibility);
-          }}
-        >
-          {isPathChangeQueueVisible ? "Hide path change diagnostics" : "Show path change diagnostics"}
-        </button>
-      ) : null}
       {isDevelopmentMode && isPathChangeQueueVisible ? (
         <PathChangeQueue
           operations={pathChangeOperations}
