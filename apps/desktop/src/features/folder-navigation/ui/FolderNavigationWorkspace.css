@@ -2,22 +2,17 @@
   background: #f7f8f5;
   color: #17211b;
   display: grid;
-  grid-template-columns: minmax(18rem, 24rem) minmax(24rem, 1fr);
+  grid-template-columns: minmax(14rem, 18rem) minmax(18rem, 24rem) minmax(24rem, 1fr);
   min-height: 100vh;
   overflow-x: auto;
 }
 
 .folder-navigation__navigation {
-  background: #ffffff;
-  border-right: 1px solid #dce4dd;
-  box-sizing: border-box;
-  display: grid;
-  gap: 1.25rem;
-  padding: 1.25rem;
+  display: contents;
 }
 
-.folder-navigation__sidebar,
-.folder-navigation__note-list,
+.folder-navigation__library-column,
+.folder-navigation__notes-column,
 .folder-navigation__pane,
 .folder-navigation__queue {
   padding: 1.25rem;
@@ -27,14 +22,43 @@
   border-right: 0;
 }
 
-.folder-navigation__sidebar,
-.folder-navigation__note-list {
-  padding: 0;
+.folder-navigation__library-column,
+.folder-navigation__notes-column {
+  background: #ffffff;
+  border-right: 1px solid #dce4dd;
+  box-sizing: border-box;
 }
 
-.folder-navigation__sidebar {
-  border-bottom: 1px solid #dce4dd;
-  padding-bottom: 1.25rem;
+.folder-navigation__library-column {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100vh;
+}
+
+.folder-navigation__library-content {
+  align-content: start;
+  display: grid;
+  gap: 1rem;
+}
+
+.folder-navigation__folder-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.folder-navigation__group-heading {
+  color: #4d6959;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.folder-navigation__notes-column {
+  align-content: start;
+  display: grid;
+  gap: 1rem;
 }
 
 .folder-navigation__eyebrow {
@@ -127,7 +151,7 @@
 }
 
 .folder-navigation__tree--root {
-  margin-top: 1rem;
+  margin-top: 0;
 }
 
 .folder-navigation__folder-row {
@@ -491,11 +515,89 @@
   width: fit-content;
 }
 
+.folder-navigation__workspace-switcher {
+  position: relative;
+}
+
+.folder-navigation__workspace-switcher-button {
+  background: #f7f8f5;
+  border: 1px solid #c8d3ca;
+  border-radius: 8px;
+  color: #17211b;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.folder-navigation__workspace-name {
+  font-weight: 700;
+}
+
+.folder-navigation__workspace-hint {
+  color: #5f6d64;
+  font-size: 0.875rem;
+}
+
+.folder-navigation__workspace-popover {
+  background: #ffffff;
+  border: 1px solid #c8d3ca;
+  border-radius: 8px;
+  bottom: calc(100% + 0.5rem);
+  box-shadow: 0 1rem 2rem rgb(23 33 27 / 14%);
+  display: grid;
+  gap: 0.875rem;
+  left: 0;
+  min-width: 16rem;
+  padding: 0.875rem;
+  position: absolute;
+  z-index: 2;
+}
+
+.folder-navigation__workspace-popover-title {
+  font-weight: 700;
+  margin: 0;
+}
+
+.folder-navigation__workspace-popover-section,
+.folder-navigation__workspace-popover-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.folder-navigation__workspace-list {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder-navigation__workspace-action {
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #17211b;
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.folder-navigation__workspace-action:hover {
+  background: #eef1ec;
+  border-color: #c8d3ca;
+}
+
 .folder-navigation__action:disabled,
 .folder-navigation__secondary-action:disabled,
 .folder-navigation__format-action:disabled,
 .folder-navigation__input:disabled,
-.folder-navigation__queue-toggle:disabled {
+.folder-navigation__queue-toggle:disabled,
+.folder-navigation__workspace-switcher-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -505,13 +607,14 @@
     grid-template-columns: minmax(18rem, 1fr);
   }
 
-  .folder-navigation__navigation,
+  .folder-navigation__library-column,
+  .folder-navigation__notes-column,
   .folder-navigation__pane {
     border-bottom: 1px solid #dce4dd;
     border-right: 0;
   }
 
-  .folder-navigation__navigation {
-    padding-bottom: 1.5rem;
+  .folder-navigation__library-column {
+    min-height: auto;
   }
 }

@@ -3,6 +3,7 @@ node_modules
 dist
 coverage
 .turbo
+.superpowers/
 apps/mobile/.expo
 apps/mobile/.expo-shared
 apps/mobile/android/.gradle
