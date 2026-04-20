@@ -69,7 +69,8 @@ export function resolveWikiLinks(notes: readonly WikiLinkNote[]): ResolvedNoteLi
 
   for (const note of notes) {
     const resolvedLinks = parseWikiLinks(note.content).map((wikiLink) => {
-      const resolvedNoteId = canonicalNoteIdsByTitle.get(wikiLink.target.toLocaleLowerCase()) ?? null;
+      const resolvedNoteId =
+        canonicalNoteIdsByTitle.get(wikiLink.target.toLocaleLowerCase()) ?? null;
 
       return {
         ...wikiLink,
