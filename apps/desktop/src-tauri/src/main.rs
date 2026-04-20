@@ -5,6 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -141,7 +142,9 @@ impl std::error::Error for CommandError {}
 async fn list_workspaces(
     app_handle: tauri::AppHandle,
 ) -> Result<Vec<DesktopWorkspace>, CommandError> {
-    let registry = load_or_create_app_workspace_registry(&app_handle).await?;
+    let registry = load_or_create_app_workspace_registry(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
 
     Ok(registry.workspaces)
 }
@@ -150,14 +153,13 @@ async fn list_workspaces(
 async fn get_active_workspace(
     app_handle: tauri::AppHandle,
 ) -> Result<DesktopWorkspace, CommandError> {
-    let registry = load_or_create_app_workspace_registry(&app_handle).await?;
+    let registry = load_or_create_app_workspace_registry(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
 
-    find_active_workspace(&registry).cloned().ok_or_else(|| {
-        CommandError::new(
-            "active_workspace_unavailable",
-            "The active workspace is unavailable.",
-        )
-    })
+    active_workspace_from_registry(&registry)
+        .cloned()
+        .map_err(|error| CommandError::new("active_workspace_unavailable", error.to_string()))
 }
 
 #[tauri::command]
@@ -165,12 +167,12 @@ async fn add_workspace(
     app_handle: tauri::AppHandle,
     workspace: AddWorkspaceRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
-    add_workspace_to_registry(
-        &app_data_dir(&app_handle)?,
-        &workspace.name,
-        workspace.root_path,
-    )
-    .await
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))?;
+
+    add_workspace_to_registry(&app_data_dir, &workspace.name, workspace.root_path)
+        .await
+        .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))
 }
 
 #[tauri::command]
@@ -178,7 +180,12 @@ async fn switch_workspace(
     app_handle: tauri::AppHandle,
     workspace: WorkspaceIdRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
-    switch_active_workspace_in_registry(&app_data_dir(&app_handle)?, &workspace.id).await
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))?;
+
+    switch_active_workspace_in_registry(&app_data_dir, &workspace.id)
+        .await
+        .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))
 }
 
 #[tauri::command]
@@ -186,7 +193,12 @@ async fn rename_workspace(
     app_handle: tauri::AppHandle,
     workspace: RenameWorkspaceRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
-    rename_workspace_in_registry(&app_data_dir(&app_handle)?, &workspace.id, &workspace.name).await
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))?;
+
+    rename_workspace_in_registry(&app_data_dir, &workspace.id, &workspace.name)
+        .await
+        .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))
 }
 
 #[tauri::command]
@@ -194,7 +206,12 @@ async fn remove_workspace(
     app_handle: tauri::AppHandle,
     workspace: WorkspaceIdRequest,
 ) -> Result<(), CommandError> {
-    remove_workspace_from_registry(&app_data_dir(&app_handle)?, &workspace.id).await
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))?;
+
+    remove_workspace_from_registry(&app_data_dir, &workspace.id)
+        .await
+        .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))
 }
 
 #[tauri::command]
@@ -209,7 +226,9 @@ async fn move_markdown_file(
         ));
     }
 
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
     let previous_path = resolve_markdown_path(&workspace_root, &change.previous_path)?;
     let next_path = resolve_markdown_path(&workspace_root, &change.next_path)?;
 
@@ -243,7 +262,9 @@ async fn refresh_note_indexes(
 async fn scan_markdown_workspace(
     app_handle: tauri::AppHandle,
 ) -> Result<Vec<ScannedMarkdownNote>, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
 
     tokio::fs::create_dir_all(&workspace_root)
         .await
@@ -259,7 +280,9 @@ async fn read_markdown_note(
     app_handle: tauri::AppHandle,
     note: ReadMarkdownNoteRequest,
 ) -> Result<String, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("note_read_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     read_markdown_file(&note_path)
@@ -272,7 +295,9 @@ async fn create_markdown_note(
     app_handle: tauri::AppHandle,
     note: CreateMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("note_create_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     create_markdown_file(&note_path, note.content.as_bytes())
@@ -289,7 +314,9 @@ async fn write_markdown_note(
     app_handle: tauri::AppHandle,
     note: WriteMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("note_write_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     write_markdown_file(&note_path, note.content.as_bytes())
@@ -306,7 +333,9 @@ async fn delete_markdown_note(
     app_handle: tauri::AppHandle,
     note: DeleteMarkdownNoteRequest,
 ) -> Result<(), CommandError> {
-    let workspace_root = active_workspace_root(&app_handle).await?;
+    let workspace_root = active_workspace_root(&app_handle)
+        .await
+        .map_err(|error| CommandError::new("note_delete_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     delete_markdown_file(&note_path)
@@ -337,32 +366,32 @@ fn main() {
     }
 }
 
-fn app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, CommandError> {
+fn app_data_dir(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     app_handle
         .path()
         .app_data_dir()
-        .map_err(|error| CommandError::new("app_data_dir_unavailable", error.to_string()))
+        .context("App data directory is unavailable.")
 }
 
-async fn active_workspace_root(app_handle: &tauri::AppHandle) -> Result<PathBuf, CommandError> {
+async fn active_workspace_root(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     let registry = load_or_create_app_workspace_registry(app_handle).await?;
-    let workspace = find_active_workspace(&registry).ok_or_else(|| {
-        CommandError::new(
-            "active_workspace_unavailable",
-            "The active workspace is unavailable.",
-        )
-    })?;
+    let workspace = active_workspace_from_registry(&registry)?;
 
     tokio::fs::create_dir_all(&workspace.root_path)
         .await
-        .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace root is unavailable: {}",
+                workspace.root_path.display()
+            )
+        })?;
 
     Ok(workspace.root_path.clone())
 }
 
 async fn load_or_create_app_workspace_registry(
     app_handle: &tauri::AppHandle,
-) -> Result<WorkspaceRegistry, CommandError> {
+) -> anyhow::Result<WorkspaceRegistry> {
     load_or_create_workspace_registry(&app_data_dir(app_handle)?).await
 }
 
@@ -385,12 +414,17 @@ fn default_workspace(app_data_dir: &Path, last_opened_at_unix_ms: u128) -> Deskt
 
 async fn load_or_create_workspace_registry(
     app_data_dir: &Path,
-) -> Result<WorkspaceRegistry, CommandError> {
+) -> anyhow::Result<WorkspaceRegistry> {
     let registry_path = workspace_registry_path(app_data_dir);
 
     if !tokio::fs::try_exists(&registry_path)
         .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?
+        .with_context(|| {
+            format!(
+                "Workspace registry is unavailable: {}",
+                registry_path.display()
+            )
+        })?
     {
         let registry = WorkspaceRegistry {
             active_workspace_id: "default".to_string(),
@@ -398,16 +432,21 @@ async fn load_or_create_workspace_registry(
         };
         tokio::fs::create_dir_all(default_workspace_root_from_app_data_dir(app_data_dir))
             .await
-            .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
+            .context("Default workspace root is unavailable.")?;
         save_workspace_registry(app_data_dir, &registry).await?;
         return Ok(registry);
     }
 
     let registry_content = tokio::fs::read_to_string(&registry_path)
         .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
-    let mut registry: WorkspaceRegistry = serde_json::from_str(&registry_content)
-        .map_err(|error| CommandError::new("workspace_registry_invalid", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace registry is unavailable: {}",
+                registry_path.display()
+            )
+        })?;
+    let mut registry: WorkspaceRegistry =
+        serde_json::from_str(&registry_content).context("Workspace registry is invalid.")?;
 
     if registry.workspaces.is_empty() {
         registry.active_workspace_id = "default".to_string();
@@ -429,7 +468,7 @@ async fn add_workspace_to_registry(
     app_data_dir: &Path,
     name: &str,
     root_path: PathBuf,
-) -> Result<DesktopWorkspace, CommandError> {
+) -> anyhow::Result<DesktopWorkspace> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     let name = validate_workspace_name(name)?;
     let root_path = validate_workspace_root(root_path).await?;
@@ -439,10 +478,7 @@ async fn add_workspace_to_registry(
         .iter()
         .any(|workspace| workspace.root_path == root_path)
     {
-        return Err(CommandError::new(
-            "workspace_root_exists",
-            "That workspace root is already registered.",
-        ));
+        bail!("That workspace root is already registered.");
     }
 
     let workspace = DesktopWorkspace {
@@ -461,7 +497,7 @@ async fn add_workspace_to_registry(
 async fn switch_active_workspace_in_registry(
     app_data_dir: &Path,
     workspace_id: &str,
-) -> Result<DesktopWorkspace, CommandError> {
+) -> anyhow::Result<DesktopWorkspace> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     let workspace_index = find_workspace_index(&registry, workspace_id)?;
     registry.active_workspace_id = workspace_id.to_string();
@@ -469,7 +505,12 @@ async fn switch_active_workspace_in_registry(
     let workspace = registry.workspaces[workspace_index].clone();
     tokio::fs::create_dir_all(&workspace.root_path)
         .await
-        .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace root is unavailable: {}",
+                workspace.root_path.display()
+            )
+        })?;
     save_workspace_registry(app_data_dir, &registry).await?;
 
     Ok(workspace)
@@ -479,7 +520,7 @@ async fn rename_workspace_in_registry(
     app_data_dir: &Path,
     workspace_id: &str,
     name: &str,
-) -> Result<DesktopWorkspace, CommandError> {
+) -> anyhow::Result<DesktopWorkspace> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     let workspace_index = find_workspace_index(&registry, workspace_id)?;
     registry.workspaces[workspace_index].name = validate_workspace_name(name)?;
@@ -492,7 +533,7 @@ async fn rename_workspace_in_registry(
 async fn remove_workspace_from_registry(
     app_data_dir: &Path,
     workspace_id: &str,
-) -> Result<(), CommandError> {
+) -> anyhow::Result<()> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     find_workspace_index(&registry, workspace_id)?;
     registry
@@ -510,12 +551,7 @@ async fn remove_workspace_from_registry(
             .iter()
             .max_by_key(|workspace| workspace.last_opened_at_unix_ms)
             .map(|workspace| workspace.id.clone())
-            .ok_or_else(|| {
-                CommandError::new(
-                    "active_workspace_unavailable",
-                    "The active workspace is unavailable.",
-                )
-            })?;
+            .context("The active workspace is unavailable.")?;
         registry.active_workspace_id = active_workspace_id;
     }
 
@@ -525,80 +561,88 @@ async fn remove_workspace_from_registry(
 async fn save_workspace_registry(
     app_data_dir: &Path,
     registry: &WorkspaceRegistry,
-) -> Result<(), CommandError> {
+) -> anyhow::Result<()> {
     tokio::fs::create_dir_all(app_data_dir)
         .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace registry directory is unavailable: {}",
+                app_data_dir.display()
+            )
+        })?;
 
     let registry_path = workspace_registry_path(app_data_dir);
     let registry_json = serde_json::to_vec_pretty(registry)
-        .map_err(|error| CommandError::new("workspace_registry_invalid", error.to_string()))?;
+        .context("Workspace registry could not be serialized.")?;
     let temporary_path = registry_path.with_extension("json.tmp");
 
     tokio::fs::write(&temporary_path, registry_json)
         .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace registry temporary file is unavailable: {}",
+                temporary_path.display()
+            )
+        })?;
     replace_file_with_temporary_path(&temporary_path, &registry_path)
         .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))
+        .with_context(|| {
+            format!(
+                "Workspace registry file is unavailable: {}",
+                registry_path.display()
+            )
+        })
 }
 
-async fn validate_workspace_root(root_path: PathBuf) -> Result<PathBuf, CommandError> {
+async fn validate_workspace_root(root_path: PathBuf) -> anyhow::Result<PathBuf> {
     if root_path.as_os_str().is_empty() || !root_path.is_absolute() {
-        return Err(CommandError::new(
-            "invalid_workspace_root",
-            "Workspace roots must be absolute paths.",
-        ));
+        bail!("Workspace roots must be absolute paths.");
     }
 
     if tokio::fs::try_exists(&root_path)
         .await
-        .map_err(|error| CommandError::new("invalid_workspace_root", error.to_string()))?
+        .with_context(|| format!("Workspace root cannot be checked: {}", root_path.display()))?
         && !tokio::fs::metadata(&root_path)
             .await
-            .map_err(|error| CommandError::new("invalid_workspace_root", error.to_string()))?
+            .with_context(|| {
+                format!(
+                    "Workspace root metadata is unavailable: {}",
+                    root_path.display()
+                )
+            })?
             .is_dir()
     {
-        return Err(CommandError::new(
-            "invalid_workspace_root",
-            "Workspace roots must point to a directory.",
-        ));
+        bail!("Workspace roots must point to a directory.");
     }
 
     tokio::fs::create_dir_all(&root_path)
         .await
-        .map_err(|error| CommandError::new("invalid_workspace_root", error.to_string()))?;
+        .with_context(|| {
+            format!(
+                "Workspace root could not be created: {}",
+                root_path.display()
+            )
+        })?;
 
     Ok(root_path)
 }
 
-fn validate_workspace_name(name: &str) -> Result<String, CommandError> {
+fn validate_workspace_name(name: &str) -> anyhow::Result<String> {
     let name = name.trim();
 
     if name.is_empty() {
-        return Err(CommandError::new(
-            "invalid_workspace_name",
-            "A workspace name is required.",
-        ));
+        bail!("A workspace name is required.");
     }
 
     Ok(name.to_string())
 }
 
-fn find_workspace_index(
-    registry: &WorkspaceRegistry,
-    workspace_id: &str,
-) -> Result<usize, CommandError> {
+fn find_workspace_index(registry: &WorkspaceRegistry, workspace_id: &str) -> anyhow::Result<usize> {
     registry
         .workspaces
         .iter()
         .position(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| {
-            CommandError::new(
-                "workspace_not_found",
-                "The requested workspace is not registered.",
-            )
-        })
+        .context("The requested workspace is not registered.")
 }
 
 fn find_active_workspace(registry: &WorkspaceRegistry) -> Option<&DesktopWorkspace> {
@@ -606,6 +650,12 @@ fn find_active_workspace(registry: &WorkspaceRegistry) -> Option<&DesktopWorkspa
         .workspaces
         .iter()
         .find(|workspace| workspace.id == registry.active_workspace_id)
+}
+
+fn active_workspace_from_registry(
+    registry: &WorkspaceRegistry,
+) -> anyhow::Result<&DesktopWorkspace> {
+    find_active_workspace(registry).context("The active workspace is unavailable.")
 }
 
 fn create_workspace_id(name: &str, workspaces: &[DesktopWorkspace]) -> String {
@@ -647,11 +697,11 @@ fn slugify_workspace_name(name: &str) -> String {
     slug.to_string()
 }
 
-fn current_unix_ms() -> Result<u128, CommandError> {
+fn current_unix_ms() -> anyhow::Result<u128> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
-        .map_err(|error| CommandError::new("system_time_unavailable", error.to_string()))
+        .context("System time is unavailable.")
 }
 
 fn resolve_markdown_path(workspace_root: &Path, path: &str) -> Result<PathBuf, CommandError> {
@@ -1248,7 +1298,7 @@ mod tests {
                     .await
                     .expect_err("relative workspace roots should be rejected");
 
-            assert_eq!(error.code, "invalid_workspace_root");
+            assert!(error.to_string().contains("absolute paths"));
             tokio::fs::remove_dir_all(&app_data_dir).await?;
             anyhow::Ok(())
         })
