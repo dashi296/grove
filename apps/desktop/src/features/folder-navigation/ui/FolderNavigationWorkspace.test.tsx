@@ -133,6 +133,21 @@ describe("NavigationPane", () => {
 });
 
 describe("WorkspaceSwitcher", () => {
+  it("connects the trigger to the workspace popover for assistive technology", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        currentWorkspaceName="Personal Notes"
+        recentWorkspaceNames={[]}
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain('aria-controls="workspace-switcher-popover"');
+    expect(markup).toContain('id="workspace-switcher-popover"');
+    expect(markup).toContain('role="dialog"');
+  });
+
   it("opens a lightweight popover with workspace actions and no sync copy", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher

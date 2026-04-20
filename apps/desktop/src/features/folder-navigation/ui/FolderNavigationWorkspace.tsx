@@ -107,6 +107,12 @@ type WorkspaceSwitcherProps = {
   initiallyOpen?: boolean;
 };
 
+type WorkspaceSwitcherPopoverProps = {
+  id: string;
+  currentWorkspaceName: string;
+  recentWorkspaceNames: readonly string[];
+};
+
 type FolderOption = {
   path: FolderScope;
   label: string;
@@ -344,6 +350,7 @@ function getNoteIndexRefreshErrorMessage(error: unknown): string {
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
 const defaultOperationMessage =
   "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.";
+const workspaceSwitcherPopoverId = "workspace-switcher-popover";
 
 const markdownToolbarCommands: readonly { command: MarkdownCommand; label: string }[] = [
   { command: "bold", label: "Bold" },
@@ -515,40 +522,61 @@ export function WorkspaceSwitcher({
         className="folder-navigation__workspace-switcher-button"
         onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
         aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-controls={isOpen ? workspaceSwitcherPopoverId : undefined}
       >
         <span className="folder-navigation__workspace-name">{currentWorkspaceName}</span>
         <span className="folder-navigation__workspace-hint">Switch workspace</span>
       </button>
       {isOpen ? (
-        <div className="folder-navigation__workspace-popover">
-          <p className="folder-navigation__eyebrow">Current workspace</p>
-          <p className="folder-navigation__workspace-popover-title">{currentWorkspaceName}</p>
-          <div className="folder-navigation__workspace-popover-section">
-            <p className="folder-navigation__group-heading">Recent workspaces</p>
-            {recentWorkspaceNames.length > 0 ? (
-              <ul className="folder-navigation__workspace-list">
-                {recentWorkspaceNames.map((workspaceName) => (
-                  <li key={workspaceName}>
-                    <button type="button" className="folder-navigation__workspace-action">
-                      {workspaceName}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="folder-navigation__muted">No recent workspaces yet.</p>
-            )}
-          </div>
-          <div className="folder-navigation__workspace-popover-actions">
-            <button type="button" className="folder-navigation__workspace-action">
-              Add workspace
-            </button>
-            <button type="button" className="folder-navigation__workspace-action">
-              Workspace settings
-            </button>
-          </div>
-        </div>
+        <WorkspaceSwitcherPopover
+          id={workspaceSwitcherPopoverId}
+          currentWorkspaceName={currentWorkspaceName}
+          recentWorkspaceNames={recentWorkspaceNames}
+        />
       ) : null}
+    </div>
+  );
+}
+
+function WorkspaceSwitcherPopover({
+  id,
+  currentWorkspaceName,
+  recentWorkspaceNames,
+}: WorkspaceSwitcherPopoverProps) {
+  return (
+    <div
+      id={id}
+      className="folder-navigation__workspace-popover"
+      role="dialog"
+      aria-label="Workspace switcher"
+    >
+      <p className="folder-navigation__eyebrow">Current workspace</p>
+      <p className="folder-navigation__workspace-popover-title">{currentWorkspaceName}</p>
+      <div className="folder-navigation__workspace-popover-section">
+        <p className="folder-navigation__group-heading">Recent workspaces</p>
+        {recentWorkspaceNames.length > 0 ? (
+          <ul className="folder-navigation__workspace-list">
+            {recentWorkspaceNames.map((workspaceName) => (
+              <li key={workspaceName}>
+                <button type="button" className="folder-navigation__workspace-action">
+                  {workspaceName}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="folder-navigation__muted">No recent workspaces yet.</p>
+        )}
+      </div>
+      <div className="folder-navigation__workspace-popover-actions">
+        <button type="button" className="folder-navigation__workspace-action">
+          Add workspace
+        </button>
+        <button type="button" className="folder-navigation__workspace-action">
+          Workspace settings
+        </button>
+      </div>
     </div>
   );
 }
