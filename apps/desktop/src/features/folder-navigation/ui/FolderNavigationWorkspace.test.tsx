@@ -1,10 +1,12 @@
-import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
+import { buildFolderTree, normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
   ActivePane,
   FolderNavigationWorkspaceContent,
+  NavigationPane,
+  WorkspaceSwitcher,
   getFolderNavigationWorkspaceClassName,
 } from "./FolderNavigationWorkspace";
 
@@ -57,6 +59,100 @@ describe("FolderNavigationWorkspaceContent", () => {
   });
 });
 
+describe("NavigationPane", () => {
+  const notes = [
+    {
+      id: "note-plan",
+      path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+      title: "Plan",
+      content: "",
+      updatedLabel: "Apr 19",
+    },
+    {
+      id: "note-personal",
+      path: normalizeNoteFilePath("Personal/Journal.md"),
+      title: "Journal",
+      content: "",
+      updatedLabel: "Apr 18",
+    },
+  ];
+  const selectedFolderPath = normalizeFolderPath("Projects/Grove");
+
+  function renderNavigationPaneMarkup(
+    overrides?: Partial<React.ComponentProps<typeof NavigationPane>>,
+  ): string {
+    return renderToStaticMarkup(
+      <NavigationPane
+        noteCount={notes.length}
+        folderTree={buildFolderTree(
+          notes.map((note) => note.path),
+          [],
+        )}
+        selectedFolderPath={selectedFolderPath}
+        expandedFolderPaths={[normalizeFolderPath("Projects"), selectedFolderPath]}
+        onSelect={() => {}}
+        onToggle={() => {}}
+        scopedNotes={notes.filter((note) => note.path.startsWith("Projects/Grove/"))}
+        selectedNoteId="note-plan"
+        scanState={{ status: "ready", errorMessage: null }}
+        createState={{ status: "idle", errorMessage: null }}
+        createTitle=""
+        onCreateTitleChange={() => {}}
+        onCreateNote={() => {}}
+        onSelectNote={() => {}}
+        {...overrides}
+      />,
+    );
+  }
+
+  it("renders Library and Notes as separate desktop navigation columns", () => {
+    const markup = renderNavigationPaneMarkup();
+
+    expect(markup).toContain("folder-navigation__library-column");
+    expect(markup).toContain("folder-navigation__notes-column");
+    expect(markup).toContain("All notes");
+    expect(markup).toContain("Folders");
+    expect(markup).toContain("Projects");
+  });
+
+  it("renders notes for the selected folder scope in the Notes column", () => {
+    const markup = renderNavigationPaneMarkup();
+
+    expect(markup).toContain("Grove");
+    expect(markup).toContain("Plan");
+    expect(markup).not.toContain("Journal");
+  });
+
+  it("places the workspace switcher in the Library column", () => {
+    const markup = renderNavigationPaneMarkup();
+
+    expect(markup).toContain("folder-navigation__workspace-switcher");
+    expect(markup).toContain("Personal Notes");
+    expect(markup).toContain("Switch workspace");
+  });
+});
+
+describe("WorkspaceSwitcher", () => {
+  it("opens a lightweight popover with workspace actions and no sync copy", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        currentWorkspaceName="Personal Notes"
+        recentWorkspaceNames={["Research", "Archive"]}
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toContain("Current workspace");
+    expect(markup).toContain("Research");
+    expect(markup).toContain("Archive");
+    expect(markup).toContain("Add workspace");
+    expect(markup).toContain("Workspace settings");
+    expect(markup).not.toContain("Synced");
+    expect(markup).not.toContain("Sync status");
+    expect(markup).not.toContain("Cloud status");
+  });
+});
+
 describe("ActivePane", () => {
   function renderActivePaneMarkup(
     overrides?: Partial<React.ComponentProps<typeof ActivePane>>,
@@ -72,9 +168,7 @@ describe("ActivePane", () => {
             updatedLabel: "Apr 19",
           },
         ]}
-        folderOptions={[
-          { path: normalizeFolderPath("Projects/Grove"), label: "Projects/Grove" },
-        ]}
+        folderOptions={[{ path: normalizeFolderPath("Projects/Grove"), label: "Projects/Grove" }]}
         selectedFolderPath={normalizeFolderPath("Projects/Grove")}
         selectedNoteId="note-plan"
         noteEditBuffer={null}

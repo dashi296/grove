@@ -101,6 +101,12 @@ type NoteListProps = {
 
 type NavigationPaneProps = SidebarProps & NoteListProps;
 
+type WorkspaceSwitcherProps = {
+  currentWorkspaceName: string;
+  recentWorkspaceNames: readonly string[];
+  initiallyOpen?: boolean;
+};
+
 type FolderOption = {
   path: FolderScope;
   label: string;
@@ -448,7 +454,7 @@ function FolderNode({
   );
 }
 
-function Sidebar({
+function LibraryColumn({
   noteCount,
   folderTree,
   selectedFolderPath,
@@ -457,39 +463,97 @@ function Sidebar({
   onToggle,
 }: SidebarProps) {
   return (
-    <aside className="folder-navigation__sidebar">
-      <p className="folder-navigation__eyebrow">{appName}</p>
-      <h1 className="folder-navigation__title">Library</h1>
-      <button
-        type="button"
-        className={
-          selectedFolderPath === null
-            ? "folder-navigation__root-button folder-navigation__root-button--selected"
-            : "folder-navigation__root-button"
-        }
-        onClick={() => onSelect(null)}
-        aria-pressed={selectedFolderPath === null}
-      >
-        <span>All notes</span>
-        <span>{noteCount}</span>
-      </button>
-      <ol className="folder-navigation__tree folder-navigation__tree--root">
-        {folderTree.map((node) => (
-          <FolderNode
-            key={node.path}
-            node={node}
-            selectedFolderPath={selectedFolderPath}
-            expandedFolderPaths={expandedFolderPaths}
-            onSelect={onSelect}
-            onToggle={onToggle}
-          />
-        ))}
-      </ol>
+    <aside className="folder-navigation__library-column" aria-label="Library">
+      <div className="folder-navigation__library-content">
+        <p className="folder-navigation__eyebrow">{appName}</p>
+        <h1 className="folder-navigation__title">Library</h1>
+        <button
+          type="button"
+          className={
+            selectedFolderPath === null
+              ? "folder-navigation__root-button folder-navigation__root-button--selected"
+              : "folder-navigation__root-button"
+          }
+          onClick={() => onSelect(null)}
+          aria-pressed={selectedFolderPath === null}
+        >
+          <span>All notes</span>
+          <span>{noteCount}</span>
+        </button>
+        <section className="folder-navigation__folder-group" aria-label="Folders">
+          <h2 className="folder-navigation__group-heading">Folders</h2>
+          <ol className="folder-navigation__tree folder-navigation__tree--root">
+            {folderTree.map((node) => (
+              <FolderNode
+                key={node.path}
+                node={node}
+                selectedFolderPath={selectedFolderPath}
+                expandedFolderPaths={expandedFolderPaths}
+                onSelect={onSelect}
+                onToggle={onToggle}
+              />
+            ))}
+          </ol>
+        </section>
+      </div>
+      <WorkspaceSwitcher currentWorkspaceName="Personal Notes" recentWorkspaceNames={[]} />
     </aside>
   );
 }
 
-function NavigationPane({
+export function WorkspaceSwitcher({
+  currentWorkspaceName,
+  recentWorkspaceNames,
+  initiallyOpen = false,
+}: WorkspaceSwitcherProps) {
+  const [isOpen, setIsOpen] = useState(initiallyOpen);
+
+  return (
+    <div className="folder-navigation__workspace-switcher">
+      <button
+        type="button"
+        className="folder-navigation__workspace-switcher-button"
+        onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
+        aria-expanded={isOpen}
+      >
+        <span className="folder-navigation__workspace-name">{currentWorkspaceName}</span>
+        <span className="folder-navigation__workspace-hint">Switch workspace</span>
+      </button>
+      {isOpen ? (
+        <div className="folder-navigation__workspace-popover">
+          <p className="folder-navigation__eyebrow">Current workspace</p>
+          <p className="folder-navigation__workspace-popover-title">{currentWorkspaceName}</p>
+          <div className="folder-navigation__workspace-popover-section">
+            <p className="folder-navigation__group-heading">Recent workspaces</p>
+            {recentWorkspaceNames.length > 0 ? (
+              <ul className="folder-navigation__workspace-list">
+                {recentWorkspaceNames.map((workspaceName) => (
+                  <li key={workspaceName}>
+                    <button type="button" className="folder-navigation__workspace-action">
+                      {workspaceName}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="folder-navigation__muted">No recent workspaces yet.</p>
+            )}
+          </div>
+          <div className="folder-navigation__workspace-popover-actions">
+            <button type="button" className="folder-navigation__workspace-action">
+              Add workspace
+            </button>
+            <button type="button" className="folder-navigation__workspace-action">
+              Workspace settings
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function NavigationPane({
   noteCount,
   folderTree,
   selectedFolderPath,
@@ -506,8 +570,8 @@ function NavigationPane({
   onSelectNote,
 }: NavigationPaneProps) {
   return (
-    <aside className="folder-navigation__navigation">
-      <Sidebar
+    <div className="folder-navigation__navigation">
+      <LibraryColumn
         noteCount={noteCount}
         folderTree={folderTree}
         selectedFolderPath={selectedFolderPath}
@@ -526,7 +590,7 @@ function NavigationPane({
         onCreateNote={onCreateNote}
         onSelectNote={onSelectNote}
       />
-    </aside>
+    </div>
   );
 }
 
@@ -542,7 +606,7 @@ function NoteList({
   onSelectNote,
 }: NoteListProps) {
   return (
-    <section className="folder-navigation__note-list" aria-label="Notes">
+    <section className="folder-navigation__notes-column" aria-label="Notes">
       <p className="folder-navigation__eyebrow">{getFolderLabel(selectedFolderPath)}</p>
       <h2 className="folder-navigation__heading">Notes</h2>
       <WorkspaceScanBanner scanState={scanState} />
@@ -1206,7 +1270,7 @@ export function FolderNavigationWorkspaceContent({
     return new Map(notes.map((note) => [note.id, note.title]));
   }, [notes]);
   const selectedResolvedNoteLinks = selectedNote
-    ? resolvedNoteLinksByNoteId.get(selectedNote.id) ?? null
+    ? (resolvedNoteLinksByNoteId.get(selectedNote.id) ?? null)
     : null;
   const saveBlockedReason =
     !canSaveNoteEditBuffer(noteEditBuffer) ||
@@ -1706,7 +1770,9 @@ export function FolderNavigationWorkspaceContent({
 
   return (
     <section
-      className={getFolderNavigationWorkspaceClassName(isDevelopmentMode && isPathChangeQueueVisible)}
+      className={getFolderNavigationWorkspaceClassName(
+        isDevelopmentMode && isPathChangeQueueVisible,
+      )}
     >
       <NavigationPane
         noteCount={notes.length}
