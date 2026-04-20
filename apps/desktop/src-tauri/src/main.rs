@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
+    future::Future,
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -114,6 +115,9 @@ struct WorkspaceRegistry {
     workspaces: Vec<DesktopWorkspace>,
 }
 
+#[derive(Default)]
+struct WorkspaceRegistryMutationLock(tokio::sync::Mutex<()>);
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CommandError {
@@ -141,10 +145,13 @@ impl std::error::Error for CommandError {}
 #[tauri::command]
 async fn list_workspaces(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
 ) -> Result<Vec<DesktopWorkspace>, CommandError> {
-    let registry = load_or_create_app_workspace_registry(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+    let registry = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        load_or_create_app_workspace_registry(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
 
     Ok(registry.workspaces)
 }
@@ -152,10 +159,13 @@ async fn list_workspaces(
 #[tauri::command]
 async fn get_active_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
 ) -> Result<DesktopWorkspace, CommandError> {
-    let registry = load_or_create_app_workspace_registry(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+    let registry = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        load_or_create_app_workspace_registry(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
 
     active_workspace_from_registry(&registry)
         .cloned()
@@ -165,58 +175,71 @@ async fn get_active_workspace(
 #[tauri::command]
 async fn add_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     workspace: AddWorkspaceRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
     let app_data_dir = app_data_dir(&app_handle)
         .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))?;
 
-    add_workspace_to_registry(&app_data_dir, &workspace.name, workspace.root_path)
-        .await
-        .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        add_workspace_to_registry(&app_data_dir, &workspace.name, workspace.root_path).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))
 }
 
 #[tauri::command]
 async fn switch_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     workspace: WorkspaceIdRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
     let app_data_dir = app_data_dir(&app_handle)
         .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))?;
 
-    switch_active_workspace_in_registry(&app_data_dir, &workspace.id)
-        .await
-        .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        switch_active_workspace_in_registry(&app_data_dir, &workspace.id).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))
 }
 
 #[tauri::command]
 async fn rename_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     workspace: RenameWorkspaceRequest,
 ) -> Result<DesktopWorkspace, CommandError> {
     let app_data_dir = app_data_dir(&app_handle)
         .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))?;
 
-    rename_workspace_in_registry(&app_data_dir, &workspace.id, &workspace.name)
-        .await
-        .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        rename_workspace_in_registry(&app_data_dir, &workspace.id, &workspace.name).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))
 }
 
 #[tauri::command]
 async fn remove_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     workspace: WorkspaceIdRequest,
 ) -> Result<(), CommandError> {
     let app_data_dir = app_data_dir(&app_handle)
         .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))?;
 
-    remove_workspace_from_registry(&app_data_dir, &workspace.id)
-        .await
-        .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        remove_workspace_from_registry(&app_data_dir, &workspace.id).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))
 }
 
 #[tauri::command]
 async fn move_markdown_file(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     change: MarkdownPathChange,
 ) -> Result<(), CommandError> {
     if change.note_id.trim().is_empty() {
@@ -226,9 +249,11 @@ async fn move_markdown_file(
         ));
     }
 
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
     let previous_path = resolve_markdown_path(&workspace_root, &change.previous_path)?;
     let next_path = resolve_markdown_path(&workspace_root, &change.next_path)?;
 
@@ -261,10 +286,13 @@ async fn refresh_note_indexes(
 #[tauri::command]
 async fn scan_markdown_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
 ) -> Result<Vec<ScannedMarkdownNote>, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
 
     tokio::fs::create_dir_all(&workspace_root)
         .await
@@ -278,11 +306,14 @@ async fn scan_markdown_workspace(
 #[tauri::command]
 async fn read_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: ReadMarkdownNoteRequest,
 ) -> Result<String, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("note_read_failed", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_read_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     read_markdown_file(&note_path)
@@ -293,11 +324,14 @@ async fn read_markdown_note(
 #[tauri::command]
 async fn create_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: CreateMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("note_create_failed", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_create_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     create_markdown_file(&note_path, note.content.as_bytes())
@@ -312,11 +346,14 @@ async fn create_markdown_note(
 #[tauri::command]
 async fn write_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: WriteMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("note_write_failed", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_write_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     write_markdown_file(&note_path, note.content.as_bytes())
@@ -331,11 +368,14 @@ async fn write_markdown_note(
 #[tauri::command]
 async fn delete_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: DeleteMarkdownNoteRequest,
 ) -> Result<(), CommandError> {
-    let workspace_root = active_workspace_root(&app_handle)
-        .await
-        .map_err(|error| CommandError::new("note_delete_failed", error.to_string()))?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_delete_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     delete_markdown_file(&note_path)
@@ -345,6 +385,7 @@ async fn delete_markdown_note(
 
 fn main() {
     if let Err(error) = tauri::Builder::default()
+        .manage(WorkspaceRegistryMutationLock::default())
         .invoke_handler(tauri::generate_handler![
             add_workspace,
             create_markdown_note,
@@ -364,6 +405,19 @@ fn main() {
     {
         eprintln!("failed to run Grove desktop app: {error}");
     }
+}
+
+async fn run_locked_workspace_registry_mutation<T, F, Fut>(
+    lock: &WorkspaceRegistryMutationLock,
+    mutation: F,
+) -> anyhow::Result<T>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+{
+    let _guard = lock.0.lock().await;
+
+    mutation().await
 }
 
 fn app_data_dir(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
@@ -1135,6 +1189,10 @@ async fn append_index_refresh_sidecar_entry(
 mod tests {
     use std::{
         path::PathBuf,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
@@ -1143,8 +1201,9 @@ mod tests {
         derive_markdown_title, find_first_markdown_heading, get_temporary_write_path,
         get_workspace_relative_markdown_path, load_or_create_workspace_registry,
         move_file_without_overwrite, read_markdown_file, remove_workspace_from_registry,
-        rename_workspace_in_registry, scan_markdown_files, switch_active_workspace_in_registry,
-        system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        rename_workspace_in_registry, run_locked_workspace_registry_mutation, scan_markdown_files,
+        switch_active_workspace_in_registry, system_time_to_unix_ms, validate_markdown_path,
+        write_markdown_file, WorkspaceRegistryMutationLock,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -1303,6 +1362,56 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("invalid workspace root test should run");
+    }
+
+    #[test]
+    fn serializes_workspace_registry_mutations() {
+        run_async(async {
+            let lock = WorkspaceRegistryMutationLock::default();
+            let active_mutations = Arc::new(AtomicUsize::new(0));
+            let max_active_mutations = Arc::new(AtomicUsize::new(0));
+
+            let lock = Arc::new(lock);
+            let first_lock = Arc::clone(&lock);
+            let second_lock = Arc::clone(&lock);
+            let first_active_mutations = Arc::clone(&active_mutations);
+            let first_max_active_mutations = Arc::clone(&max_active_mutations);
+            let second_active_mutations = Arc::clone(&active_mutations);
+            let second_max_active_mutations = Arc::clone(&max_active_mutations);
+
+            let first_mutation = tokio::spawn(async move {
+                run_locked_workspace_registry_mutation(&first_lock, || {
+                    let active_mutations = Arc::clone(&first_active_mutations);
+                    let max_active_mutations = Arc::clone(&first_max_active_mutations);
+                    async move {
+                        let active = active_mutations.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active_mutations.fetch_max(active, Ordering::SeqCst);
+                        tokio::task::yield_now().await;
+                        active_mutations.fetch_sub(1, Ordering::SeqCst);
+                        anyhow::Ok(())
+                    }
+                })
+                .await
+            });
+            let second_mutation = tokio::spawn(async move {
+                let active_mutations = Arc::clone(&second_active_mutations);
+                let max_active_mutations = Arc::clone(&second_max_active_mutations);
+                run_locked_workspace_registry_mutation(&second_lock, || async move {
+                    let active = active_mutations.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_mutations.fetch_max(active, Ordering::SeqCst);
+                    tokio::task::yield_now().await;
+                    active_mutations.fetch_sub(1, Ordering::SeqCst);
+                    anyhow::Ok(())
+                })
+                .await
+            });
+
+            first_mutation.await??;
+            second_mutation.await??;
+            assert_eq!(max_active_mutations.load(Ordering::SeqCst), 1);
+            anyhow::Ok(())
+        })
+        .expect("registry mutations should be serialized");
     }
 
     #[test]
