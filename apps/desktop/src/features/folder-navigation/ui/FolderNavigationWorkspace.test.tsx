@@ -141,11 +141,34 @@ describe("WorkspaceSwitcher", () => {
         initiallyOpen={true}
       />,
     );
+    const controlsMatch = markup.match(/aria-controls="([^"]+)"/);
+    const idMatch = markup.match(/id="([^"]+)"/);
 
     expect(markup).toContain('aria-haspopup="dialog"');
-    expect(markup).toContain('aria-controls="workspace-switcher-popover"');
-    expect(markup).toContain('id="workspace-switcher-popover"');
     expect(markup).toContain('role="dialog"');
+    expect(controlsMatch?.[1]).toBe(idMatch?.[1]);
+  });
+
+  it("uses unique popover ids when more than one switcher is rendered", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <WorkspaceSwitcher
+          currentWorkspaceName="Personal Notes"
+          recentWorkspaceNames={[]}
+          initiallyOpen={true}
+        />
+        <WorkspaceSwitcher
+          currentWorkspaceName="Archive"
+          recentWorkspaceNames={[]}
+          initiallyOpen={true}
+        />
+      </>,
+    );
+
+    const popoverIds = Array.from(markup.matchAll(/id="([^"]+)"/g), (match) => match[1]);
+
+    expect(popoverIds).toHaveLength(2);
+    expect(new Set(popoverIds).size).toBe(2);
   });
 
   it("opens a lightweight popover with workspace actions and no sync copy", () => {

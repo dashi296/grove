@@ -11,7 +11,7 @@ import {
 } from "@grove/core";
 import type { FolderScope, FolderTreeNode, ResolvedWikiLink } from "@grove/core";
 import type { MarkdownCommand, MarkdownSelection } from "@grove/editor";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -350,8 +350,6 @@ function getNoteIndexRefreshErrorMessage(error: unknown): string {
 const noteSaveBlockedMessage = "Wait for this note's path change to finish before saving.";
 const defaultOperationMessage =
   "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.";
-const workspaceSwitcherPopoverId = "workspace-switcher-popover";
-
 const markdownToolbarCommands: readonly { command: MarkdownCommand; label: string }[] = [
   { command: "bold", label: "Bold" },
   { command: "italic", label: "Italic" },
@@ -513,6 +511,7 @@ export function WorkspaceSwitcher({
   recentWorkspaceNames,
   initiallyOpen = false,
 }: WorkspaceSwitcherProps) {
+  const popoverId = useId();
   const [isOpen, setIsOpen] = useState(initiallyOpen);
 
   return (
@@ -523,14 +522,14 @@ export function WorkspaceSwitcher({
         onClick={() => setIsOpen((currentIsOpen) => !currentIsOpen)}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        aria-controls={isOpen ? workspaceSwitcherPopoverId : undefined}
+        aria-controls={isOpen ? popoverId : undefined}
       >
         <span className="folder-navigation__workspace-name">{currentWorkspaceName}</span>
         <span className="folder-navigation__workspace-hint">Switch workspace</span>
       </button>
       {isOpen ? (
         <WorkspaceSwitcherPopover
-          id={workspaceSwitcherPopoverId}
+          id={popoverId}
           currentWorkspaceName={currentWorkspaceName}
           recentWorkspaceNames={recentWorkspaceNames}
         />
