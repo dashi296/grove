@@ -182,7 +182,8 @@ async fn add_workspace(
         .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))?;
 
     run_locked_workspace_registry_mutation(lock.inner(), || async move {
-        add_workspace_to_registry(&app_data_dir, &workspace.name, workspace.root_path).await
+        add_and_activate_workspace_in_registry(&app_data_dir, &workspace.name, workspace.root_path)
+            .await
     })
     .await
     .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))
@@ -518,22 +519,20 @@ async fn load_or_create_workspace_registry(
     Ok(registry)
 }
 
-async fn add_workspace_to_registry(
+async fn add_and_activate_workspace_in_registry(
     app_data_dir: &Path,
     name: &str,
     root_path: PathBuf,
 ) -> anyhow::Result<DesktopWorkspace> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     let name = validate_workspace_name(name)?;
-    let root_path = validate_workspace_root(root_path).await?;
+    let root_path = validate_workspace_root_path(root_path)?;
 
-    if registry
-        .workspaces
-        .iter()
-        .any(|workspace| workspace.root_path == root_path)
-    {
+    if workspace_root_is_registered(&registry, &root_path).await? {
         bail!("That workspace root is already registered.");
     }
+
+    let root_path = prepare_workspace_root(root_path).await?;
 
     let workspace = DesktopWorkspace {
         id: create_workspace_id(&name, &registry.workspaces),
@@ -648,11 +647,33 @@ async fn save_workspace_registry(
         })
 }
 
-async fn validate_workspace_root(root_path: PathBuf) -> anyhow::Result<PathBuf> {
+fn validate_workspace_root_path(root_path: PathBuf) -> anyhow::Result<PathBuf> {
     if root_path.as_os_str().is_empty() || !root_path.is_absolute() {
         bail!("Workspace roots must be absolute paths.");
     }
 
+    Ok(lexically_normalize_path(&root_path))
+}
+
+fn lexically_normalize_path(path: &Path) -> PathBuf {
+    let mut normalized_path = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized_path.push(prefix.as_os_str()),
+            Component::RootDir => normalized_path.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized_path.pop();
+            }
+            Component::Normal(segment) => normalized_path.push(segment),
+        }
+    }
+
+    normalized_path
+}
+
+async fn prepare_workspace_root(root_path: PathBuf) -> anyhow::Result<PathBuf> {
     if tokio::fs::try_exists(&root_path)
         .await
         .with_context(|| format!("Workspace root cannot be checked: {}", root_path.display()))?
@@ -678,7 +699,56 @@ async fn validate_workspace_root(root_path: PathBuf) -> anyhow::Result<PathBuf> 
             )
         })?;
 
-    Ok(root_path)
+    tokio::fs::canonicalize(&root_path).await.with_context(|| {
+        format!(
+            "Workspace root could not be resolved: {}",
+            root_path.display()
+        )
+    })
+}
+
+async fn workspace_root_is_registered(
+    registry: &WorkspaceRegistry,
+    root_path: &Path,
+) -> anyhow::Result<bool> {
+    let canonical_root_path = canonicalize_existing_path(root_path).await?;
+
+    for workspace in &registry.workspaces {
+        if workspace.root_path == root_path {
+            return Ok(true);
+        }
+
+        if canonical_root_path
+            .as_ref()
+            .is_some_and(|path| path == &workspace.root_path)
+        {
+            return Ok(true);
+        }
+
+        if let Some(canonical_registered_root_path) =
+            canonicalize_existing_path(&workspace.root_path).await?
+        {
+            if Some(&canonical_registered_root_path) == canonical_root_path.as_ref() {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+async fn canonicalize_existing_path(path: &Path) -> anyhow::Result<Option<PathBuf>> {
+    if !tokio::fs::try_exists(path)
+        .await
+        .with_context(|| format!("Workspace root cannot be checked: {}", path.display()))?
+    {
+        return Ok(None);
+    }
+
+    tokio::fs::canonicalize(path)
+        .await
+        .map(Some)
+        .with_context(|| format!("Workspace root could not be resolved: {}", path.display()))
 }
 
 fn validate_workspace_name(name: &str) -> anyhow::Result<String> {
@@ -1197,13 +1267,13 @@ mod tests {
     };
 
     use super::{
-        add_workspace_to_registry, create_markdown_file, delete_markdown_file,
+        add_and_activate_workspace_in_registry, create_markdown_file, delete_markdown_file,
         derive_markdown_title, find_first_markdown_heading, get_temporary_write_path,
         get_workspace_relative_markdown_path, load_or_create_workspace_registry,
         move_file_without_overwrite, read_markdown_file, remove_workspace_from_registry,
         rename_workspace_in_registry, run_locked_workspace_registry_mutation, scan_markdown_files,
-        switch_active_workspace_in_registry, system_time_to_unix_ms, validate_markdown_path,
-        write_markdown_file, WorkspaceRegistryMutationLock,
+        system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        WorkspaceRegistryMutationLock,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -1291,17 +1361,20 @@ mod tests {
     }
 
     #[test]
-    fn persists_added_workspace_and_switches_active_workspace() {
+    fn adding_workspace_persists_it_and_makes_it_active() {
         run_async(async {
             let app_data_dir = unique_test_dir("persists-added-workspace");
             let workspace_root = unique_test_dir("external-workspace-root");
             tokio::fs::create_dir_all(&workspace_root).await?;
             load_or_create_workspace_registry(&app_data_dir).await?;
+            let canonical_workspace_root = tokio::fs::canonicalize(&workspace_root).await?;
 
-            let added_workspace =
-                add_workspace_to_registry(&app_data_dir, "Research", workspace_root.clone())
-                    .await?;
-            switch_active_workspace_in_registry(&app_data_dir, &added_workspace.id).await?;
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
             let registry = load_or_create_workspace_registry(&app_data_dir).await?;
 
             assert_eq!(registry.active_workspace_id, added_workspace.id);
@@ -1309,7 +1382,7 @@ mod tests {
                 .workspaces
                 .iter()
                 .any(|workspace| workspace.name == "Research"
-                    && workspace.root_path == workspace_root));
+                    && workspace.root_path == canonical_workspace_root));
             tokio::fs::remove_dir_all(&app_data_dir).await?;
             tokio::fs::remove_dir_all(&workspace_root).await?;
             anyhow::Ok(())
@@ -1326,9 +1399,12 @@ mod tests {
             tokio::fs::create_dir_all(&workspace_root).await?;
             tokio::fs::write(&note_path, "# Plan").await?;
             load_or_create_workspace_registry(&app_data_dir).await?;
-            let added_workspace =
-                add_workspace_to_registry(&app_data_dir, "Research", workspace_root.clone())
-                    .await?;
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
 
             rename_workspace_in_registry(&app_data_dir, &added_workspace.id, "Archive").await?;
             remove_workspace_from_registry(&app_data_dir, &added_workspace.id).await?;
@@ -1352,16 +1428,80 @@ mod tests {
             let app_data_dir = unique_test_dir("rejects-invalid-workspace-roots");
             load_or_create_workspace_registry(&app_data_dir).await?;
 
-            let error =
-                add_workspace_to_registry(&app_data_dir, "Relative", PathBuf::from("Notes"))
-                    .await
-                    .expect_err("relative workspace roots should be rejected");
+            let error = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Relative",
+                PathBuf::from("Notes"),
+            )
+            .await
+            .expect_err("relative workspace roots should be rejected");
 
             assert!(error.to_string().contains("absolute paths"));
             tokio::fs::remove_dir_all(&app_data_dir).await?;
             anyhow::Ok(())
         })
         .expect("invalid workspace root test should run");
+    }
+
+    #[test]
+    fn rejects_duplicate_workspace_roots_without_creating_new_directories() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("rejects-duplicate-without-creating");
+            let workspace_root = unique_test_dir("existing-workspace-root");
+            let duplicate_child = workspace_root.join("CreatedByRejectedAdd");
+            let duplicate_root = duplicate_child.join("..");
+            tokio::fs::create_dir_all(&workspace_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+            add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
+
+            let error = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Duplicate Research",
+                duplicate_root,
+            )
+            .await
+            .expect_err("duplicate workspace roots should be rejected");
+
+            assert!(error.to_string().contains("already registered"));
+            assert!(!tokio::fs::try_exists(&duplicate_child).await?);
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("duplicate workspace root test should run");
+    }
+
+    #[test]
+    fn canonicalizes_workspace_roots_before_persisting() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("canonicalizes-workspace-root");
+            let workspace_root = unique_test_dir("canonical-workspace-root");
+            let nested_root = workspace_root.join("Nested");
+            let noncanonical_root = nested_root.join("..").join("Nested");
+            tokio::fs::create_dir_all(&nested_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                noncanonical_root,
+            )
+            .await?;
+
+            assert_eq!(
+                added_workspace.root_path,
+                tokio::fs::canonicalize(&nested_root).await?
+            );
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace root should be canonicalized");
     }
 
     #[test]
