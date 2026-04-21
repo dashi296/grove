@@ -181,14 +181,14 @@ describe("removeCurrent", () => {
     expect(removeWorkspaceMock).toHaveBeenCalledWith({ id: "ws-a" });
   });
 
-  it("clears the failed load state when the last workspace is removed", async () => {
+  it("surfaces a failed load state when refreshing the active workspace fails", async () => {
     removeWorkspaceMock.mockResolvedValue(undefined);
-    listWorkspacesMock.mockResolvedValue([]);
-    getActiveWorkspaceMock.mockRejectedValue(new Error("No workspace found"));
+    listWorkspacesMock.mockResolvedValue([workspaceB]);
+    getActiveWorkspaceMock.mockRejectedValue(new Error("The active workspace is unavailable."));
 
     useWorkspaceStore.setState({
       activeWorkspace: workspaceA,
-      allWorkspaces: [workspaceA],
+      allWorkspaces: [workspaceA, workspaceB],
       loadState: { status: "failed", errorMessage: "No workspace found" },
     });
 
@@ -197,7 +197,10 @@ describe("removeCurrent", () => {
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace).toBeNull();
     expect(state.allWorkspaces).toEqual([]);
-    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
+    expect(state.loadState).toEqual({
+      status: "failed",
+      errorMessage: "The active workspace is unavailable.",
+    });
   });
 });
 

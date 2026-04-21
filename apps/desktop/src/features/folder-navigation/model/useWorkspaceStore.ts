@@ -26,8 +26,25 @@ type WorkspaceStore = {
   removeCurrent: (id: string) => Promise<void>;
 };
 
+type WorkspaceSnapshot = {
+  activeWorkspace: DesktopWorkspace | null;
+  allWorkspaces: readonly DesktopWorkspace[];
+};
+
 function getWorkspaceErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The workspace operation failed.";
+}
+
+async function loadWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
+  const [activeWorkspace, allWorkspaces] = await Promise.all([
+    getActiveWorkspace(),
+    listWorkspaces(),
+  ]);
+
+  return {
+    activeWorkspace,
+    allWorkspaces,
+  };
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
@@ -38,8 +55,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   loadWorkspaces: async () => {
     set({ loadState: { status: "loading", errorMessage: null } });
     try {
-      const [active, all] = await Promise.all([getActiveWorkspace(), listWorkspaces()]);
-      set({ activeWorkspace: active, allWorkspaces: all, loadState: { status: "ready", errorMessage: null } });
+      const { activeWorkspace, allWorkspaces } = await loadWorkspaceSnapshot();
+      set({
+        activeWorkspace,
+        allWorkspaces,
+        loadState: { status: "ready", errorMessage: null },
+      });
     } catch (error) {
       set({
         activeWorkspace: null,
@@ -83,19 +104,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
 
   removeCurrent: async (id: string) => {
     await removeWorkspace({ id });
-    const all = await listWorkspaces();
     try {
-      const newActive = await getActiveWorkspace();
+      const { activeWorkspace, allWorkspaces } = await loadWorkspaceSnapshot();
       set({
-        activeWorkspace: newActive,
-        allWorkspaces: all,
+        activeWorkspace,
+        allWorkspaces,
         loadState: { status: "ready", errorMessage: null },
       });
-    } catch {
+    } catch (error) {
       set({
         activeWorkspace: null,
-        allWorkspaces: all,
-        loadState: { status: "ready", errorMessage: null },
+        allWorkspaces: [],
+        loadState: { status: "failed", errorMessage: getWorkspaceErrorMessage(error) },
       });
     }
   },
