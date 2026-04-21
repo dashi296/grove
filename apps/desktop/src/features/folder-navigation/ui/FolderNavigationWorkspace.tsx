@@ -116,6 +116,7 @@ type NavigationPaneProps = SidebarProps & NoteListProps;
 
 type WorkspaceSwitcherProps = WorkspaceSwitcherSlice & {
   initiallyOpen?: boolean;
+  initialView?: PopoverView;
 };
 
 type PopoverView = "list" | "add" | "settings";
@@ -127,6 +128,7 @@ type PopoverOperationState = {
 
 type WorkspaceSwitcherPopoverProps = WorkspaceSwitcherSlice & {
   id: string;
+  initialView?: PopoverView;
 };
 
 type FolderOption = {
@@ -546,6 +548,7 @@ export function WorkspaceSwitcher({
   onRenameWorkspace,
   onRemoveWorkspace,
   initiallyOpen = false,
+  initialView = "list",
 }: WorkspaceSwitcherProps) {
   const popoverId = useId();
   const [isOpen, setIsOpen] = useState(initiallyOpen);
@@ -569,6 +572,7 @@ export function WorkspaceSwitcher({
           activeWorkspaceName={activeWorkspaceName}
           recentWorkspaces={recentWorkspaces}
           switchBlockedReason={switchBlockedReason}
+          initialView={initialView}
           onSwitchWorkspace={async (id) => {
             await onSwitchWorkspace(id);
             setIsOpen(false);
@@ -596,12 +600,13 @@ function WorkspaceSwitcherPopover({
   activeWorkspaceName,
   recentWorkspaces,
   switchBlockedReason,
+  initialView = "list",
   onSwitchWorkspace,
   onAddWorkspace,
   onRenameWorkspace,
   onRemoveWorkspace,
 }: WorkspaceSwitcherPopoverProps) {
-  const [view, setView] = useState<PopoverView>("list");
+  const [view, setView] = useState<PopoverView>(initialView);
   const [operation, setOperation] = useState<PopoverOperationState>({
     status: "idle",
     errorMessage: null,
@@ -623,6 +628,11 @@ function WorkspaceSwitcherPopover({
   }
 
   async function handleSwitch(id: string): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
     setOperation({ status: "pending", errorMessage: null });
     try {
       await onSwitchWorkspace(id);
@@ -635,6 +645,11 @@ function WorkspaceSwitcherPopover({
   }
 
   async function handleAdd(): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
     if (addName.trim() === "" || addPath.trim() === "") return;
     setOperation({ status: "pending", errorMessage: null });
     try {
@@ -661,6 +676,11 @@ function WorkspaceSwitcherPopover({
   }
 
   async function handleRemove(): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
     const confirmed = window.confirm(
       `Remove "${activeWorkspaceName}" from Grove? Your Markdown files will not be deleted.`,
     );
@@ -720,6 +740,7 @@ function WorkspaceSwitcherPopover({
               type="button"
               className="folder-navigation__workspace-action"
               onClick={() => switchView("add")}
+              disabled={switchBlockedReason !== null}
             >
               Add workspace
             </button>
@@ -768,7 +789,12 @@ function WorkspaceSwitcherPopover({
                 type="button"
                 className="folder-navigation__action"
                 onClick={() => { void handleAdd(); }}
-                disabled={operation.status === "pending" || addName.trim() === "" || addPath.trim() === ""}
+                disabled={
+                  switchBlockedReason !== null ||
+                  operation.status === "pending" ||
+                  addName.trim() === "" ||
+                  addPath.trim() === ""
+                }
               >
                 {operation.status === "pending" ? "Adding..." : "Add"}
               </button>
@@ -829,7 +855,7 @@ function WorkspaceSwitcherPopover({
                 type="button"
                 className="folder-navigation__secondary-action"
                 onClick={() => { void handleRemove(); }}
-                disabled={operation.status === "pending"}
+                disabled={switchBlockedReason !== null || operation.status === "pending"}
               >
                 Remove from Grove
               </button>
@@ -1544,6 +1570,7 @@ export function FolderNavigationWorkspaceContent({
     queuePathChangeOperation,
     retryPathChangeStep,
     clearCompletedPathChanges,
+    resetPathChangeQueue,
     runNextPathChangeStep,
   } = usePathChangeQueue(desktopPathChangeExecutor);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
@@ -1972,6 +1999,7 @@ export function FolderNavigationWorkspaceContent({
     setSelectedNoteId("");
     setNoteEditBuffer(null);
     setEditorNotice(null);
+    resetPathChangeQueue();
     setScanState({ status: "loading", errorMessage: null });
     setCreateState({ status: "idle", errorMessage: null });
     setDeleteState({ status: "idle", errorMessage: null });
@@ -2023,7 +2051,7 @@ export function FolderNavigationWorkspaceContent({
     return () => {
       canceled = true;
     };
-  }, [activeWorkspace?.id]);
+  }, [activeWorkspace?.id, resetPathChangeQueue]);
 
   useEffect(() => {
     if (selectedNote === undefined) {

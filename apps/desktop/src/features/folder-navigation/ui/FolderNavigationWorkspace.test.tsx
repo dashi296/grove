@@ -225,6 +225,31 @@ describe("WorkspaceSwitcher", () => {
     expect(markup).toContain("Save or discard the current draft before switching workspaces.");
   });
 
+  it("disables add workspace while note edits are dirty", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Save or discard the current draft before switching workspaces."
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toMatch(/<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/);
+  });
+
+  it("disables remove workspace while note edits are dirty", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Save or discard the current draft before switching workspaces."
+        initiallyOpen={true}
+        initialView="settings"
+      />,
+    );
+
+    expect(markup).toMatch(/<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/);
+  });
+
   it("renders the active workspace name from props", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} activeWorkspaceName="My Research" />,

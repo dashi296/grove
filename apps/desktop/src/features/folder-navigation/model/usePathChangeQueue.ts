@@ -20,6 +20,7 @@ export type PathChangeQueueState = {
   queuePathChangeOperation: (mutation: FolderWorkspaceMutation) => void;
   retryPathChangeStep: (operationId: string, stepId: FolderWorkspaceOperationStepId) => void;
   clearCompletedPathChanges: () => void;
+  resetPathChangeQueue: () => void;
   runNextPathChangeStep: (operationId: string) => Promise<void>;
 };
 
@@ -58,6 +59,13 @@ export function usePathChangeQueue(
 
   const clearCompletedPathChanges = useCallback((): void => {
     setPathChangeOperations(clearCompletedPathChangeOperations);
+  }, []);
+
+  const resetPathChangeQueue = useCallback((): void => {
+    runningOperationIdSet.current.clear();
+    nextOperationNumber.current = 1;
+    setRunningOperationIds([]);
+    setPathChangeOperations([]);
   }, []);
 
   const runNextPathChangeStep = useCallback(
@@ -110,6 +118,7 @@ export function usePathChangeQueue(
     queuePathChangeOperation,
     retryPathChangeStep,
     clearCompletedPathChanges,
+    resetPathChangeQueue,
     runNextPathChangeStep,
   };
 }
