@@ -200,6 +200,11 @@ type WorkspaceScanState = {
   errorMessage: string | null;
 };
 
+type WorkspaceLoadState = {
+  status: "idle" | "loading" | "ready" | "failed";
+  errorMessage: string | null;
+};
+
 type NoteCreateState = {
   status: "idle" | "creating" | "failed";
   errorMessage: string | null;
@@ -356,6 +361,48 @@ function getExpandedFolderPathsForNotes(notes: readonly NoteListItem[]): string[
 
 function getScanErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown workspace scan failed.";
+}
+
+export function getScanStateWithoutActiveWorkspace(
+  workspaceLoadState: WorkspaceLoadState,
+): WorkspaceScanState {
+  if (workspaceLoadState.status === "failed") {
+    return {
+      status: "failed",
+      errorMessage: workspaceLoadState.errorMessage ?? "The workspace operation failed.",
+    };
+  }
+
+  if (workspaceLoadState.status === "loading") {
+    return {
+      status: "loading",
+      errorMessage: null,
+    };
+  }
+
+  return {
+    status: "ready",
+    errorMessage: null,
+  };
+}
+
+export function getActiveWorkspaceName(
+  activeWorkspace: DesktopWorkspace | null,
+  workspaceLoadState: WorkspaceLoadState,
+): string {
+  if (activeWorkspace !== null) {
+    return activeWorkspace.name;
+  }
+
+  if (workspaceLoadState.status === "loading") {
+    return "Loading...";
+  }
+
+  if (workspaceLoadState.status === "failed") {
+    return "Workspace unavailable";
+  }
+
+  return "No workspace selected";
 }
 
 function getNoteReadErrorMessage(error: unknown): string {
@@ -2006,6 +2053,14 @@ export function FolderNavigationWorkspaceContent({
 
   useEffect(() => {
     if (activeWorkspace === null) {
+      setWorkspaceState(initialWorkspaceState);
+      setSelectedNoteId("");
+      setNoteEditBuffer(null);
+      setEditorNotice(null);
+      resetPathChangeQueue();
+      setCreateState({ status: "idle", errorMessage: null });
+      setDeleteState({ status: "idle", errorMessage: null });
+      setScanState(getScanStateWithoutActiveWorkspace(workspaceLoadState));
       return;
     }
 
@@ -2065,7 +2120,7 @@ export function FolderNavigationWorkspaceContent({
     return () => {
       canceled = true;
     };
-  }, [activeWorkspace?.id, resetPathChangeQueue]);
+  }, [activeWorkspace, activeWorkspace?.id, resetPathChangeQueue, workspaceLoadState]);
 
   useEffect(() => {
     if (selectedNote === undefined) {
@@ -2187,7 +2242,7 @@ export function FolderNavigationWorkspaceContent({
           void createNoteInSelectedFolder();
         }}
         onSelectNote={selectNote}
-        activeWorkspaceName={activeWorkspace?.name ?? (workspaceLoadState.status === "loading" ? "Loading..." : "")}
+        activeWorkspaceName={getActiveWorkspaceName(activeWorkspace, workspaceLoadState)}
         recentWorkspaces={recentWorkspaces}
         switchBlockedReason={switchBlockedReason}
         onSwitchWorkspace={handleSwitchWorkspace}

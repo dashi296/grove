@@ -7,7 +7,9 @@ import {
   FolderNavigationWorkspaceContent,
   NavigationPane,
   WorkspaceSwitcher,
+  getActiveWorkspaceName,
   getFolderNavigationWorkspaceClassName,
+  getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
 } from "./FolderNavigationWorkspace";
 
@@ -346,6 +348,52 @@ describe("getWorkspaceSwitchBlockedReason", () => {
     );
 
     expect(reason).toBeNull();
+  });
+});
+
+describe("getScanStateWithoutActiveWorkspace", () => {
+  it("surfaces workspace load failures instead of leaving the note list loading forever", () => {
+    expect(
+      getScanStateWithoutActiveWorkspace({
+        status: "failed",
+        errorMessage: "No workspace found",
+      }),
+    ).toEqual({
+      status: "failed",
+      errorMessage: "No workspace found",
+    });
+  });
+
+  it("treats a missing active workspace after a successful load as an empty ready state", () => {
+    expect(
+      getScanStateWithoutActiveWorkspace({
+        status: "ready",
+        errorMessage: null,
+      }),
+    ).toEqual({
+      status: "ready",
+      errorMessage: null,
+    });
+  });
+});
+
+describe("getActiveWorkspaceName", () => {
+  it("shows a fallback label when no workspace is selected", () => {
+    expect(
+      getActiveWorkspaceName(null, {
+        status: "ready",
+        errorMessage: null,
+      }),
+    ).toBe("No workspace selected");
+  });
+
+  it("shows that workspaces are unavailable when loading failed", () => {
+    expect(
+      getActiveWorkspaceName(null, {
+        status: "failed",
+        errorMessage: "No workspace found",
+      }),
+    ).toBe("Workspace unavailable");
   });
 });
 
