@@ -416,7 +416,7 @@ describe("ActivePane", () => {
             path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
             title: "Plan",
             content: "[[Research]] [[Missing|Untriaged]]",
-            tags: ["project", "active"],
+            tags: ["project", "work"],
             updatedLabel: "Apr 19",
           },
         ]}
@@ -484,6 +484,34 @@ describe("ActivePane", () => {
     );
   }
 
+  it("shows tags inside the Details disclosure when the note has tags", () => {
+    const markup = renderActivePaneMarkup({ initialDetailsOpen: true });
+
+    expect(markup).toContain("Tags");
+    expect(markup).toContain("#project");
+    expect(markup).toContain("#work");
+    expect(markup).toContain("folder-navigation__tag");
+  });
+
+  it("omits the Tags section when the note has no tags", () => {
+    const markup = renderActivePaneMarkup({
+      initialDetailsOpen: true,
+      notes: [
+        {
+          id: "note-plan",
+          path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+          title: "Plan",
+          content: "No tags here.",
+          tags: [],
+          updatedLabel: "Apr 19",
+        },
+      ],
+    });
+
+    expect(markup).not.toContain("Tags");
+    expect(markup).not.toContain("folder-navigation__tag");
+  });
+
   it("shows resolved links, unresolved references, and backlinks in the note pane", () => {
     const markup = renderActivePaneMarkup({ initialDetailsOpen: true });
 
@@ -492,7 +520,7 @@ describe("ActivePane", () => {
     expect(markup).toContain("Path");
     expect(markup).toContain("Tags");
     expect(markup).toContain("#project");
-    expect(markup).toContain("#active");
+    expect(markup).toContain("#work");
     expect(markup).toContain("Research");
     expect(markup).toContain("Untriaged -&gt; Missing");
     expect(markup).toContain("Review via Project plan");
