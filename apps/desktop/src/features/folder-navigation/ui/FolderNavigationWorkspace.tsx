@@ -260,6 +260,19 @@ function getFolderLabel(folderPath: FolderScope): string {
   return folderPath === null ? "Workspace" : getFolderDisplayName(folderPath);
 }
 
+export function getWorkspaceSwitchBlockedReason(
+  noteEditBuffer: NoteEditBuffer | null,
+  pathChangeOperations: readonly FolderWorkspacePathChangeOperation[],
+): string | null {
+  if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
+    return "Save or discard the current draft before switching workspaces.";
+  }
+
+  return pathChangeOperations.some((operation) => !isPathChangeOperationComplete(operation))
+    ? "Finish pending path changes before switching workspaces."
+    : null;
+}
+
 function getFolderPathLabel(folderPath: FolderScope): string {
   return folderPath === null ? "Workspace root" : folderPath;
 }
@@ -1617,9 +1630,10 @@ export function FolderNavigationWorkspaceContent({
     selectedNote === undefined || !isNoteAffectedByPathChange(pathChangeOperations, selectedNote.id)
       ? null
       : "Delete is unavailable while this note has unfinished path changes.";
-  const switchBlockedReason = isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)
-    ? "Save or discard the current draft before switching workspaces."
-    : null;
+  const switchBlockedReason = getWorkspaceSwitchBlockedReason(
+    noteEditBuffer,
+    pathChangeOperations,
+  );
   const recentWorkspaces = getRecentWorkspaces(allWorkspaces, activeWorkspace?.id);
 
   async function handleSwitchWorkspace(id: string): Promise<void> {

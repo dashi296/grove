@@ -8,6 +8,7 @@ import {
   NavigationPane,
   WorkspaceSwitcher,
   getFolderNavigationWorkspaceClassName,
+  getWorkspaceSwitchBlockedReason,
 } from "./FolderNavigationWorkspace";
 
 describe("getFolderNavigationWorkspaceClassName", () => {
@@ -225,6 +226,21 @@ describe("WorkspaceSwitcher", () => {
     expect(markup).toContain("Save or discard the current draft before switching workspaces.");
   });
 
+  it("shows the switch blocked reason when path changes are unfinished", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Finish pending path changes before switching workspaces."
+        recentWorkspaces={[
+          { id: "ws-b", name: "Work Notes", rootPath: "/notes/work", lastOpenedAtUnixMs: 1000 },
+        ]}
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toContain("Finish pending path changes before switching workspaces.");
+  });
+
   it("disables add workspace while note edits are dirty", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher
@@ -256,6 +272,80 @@ describe("WorkspaceSwitcher", () => {
     );
 
     expect(markup).toContain("My Research");
+  });
+});
+
+describe("getWorkspaceSwitchBlockedReason", () => {
+  it("blocks switching when the current note has unsaved edits", () => {
+    const reason = getWorkspaceSwitchBlockedReason(
+      {
+        noteId: "note-1",
+        path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+        baseContent: "before",
+        draftContent: "after",
+        status: "dirty",
+        errorMessage: null,
+      },
+      [],
+    );
+
+    expect(reason).toBe("Save or discard the current draft before switching workspaces.");
+  });
+
+  it("blocks switching when path changes are unfinished", () => {
+    const reason = getWorkspaceSwitchBlockedReason(null, [
+      {
+        id: "path-change-1",
+        reason: "note-move",
+        affectedNoteIds: ["note-1"],
+        pathChanges: [
+          {
+            noteId: "note-1",
+            previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+            nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+          },
+        ],
+        steps: [
+          { id: "file-move", status: "completed" },
+          { id: "index-refresh", status: "pending" },
+        ],
+      },
+    ]);
+
+    expect(reason).toBe("Finish pending path changes before switching workspaces.");
+  });
+
+  it("allows switching when drafts are clean and path changes are complete", () => {
+    const reason = getWorkspaceSwitchBlockedReason(
+      {
+        noteId: "note-1",
+        path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+        baseContent: "same",
+        draftContent: "same",
+        status: "clean",
+        errorMessage: null,
+      },
+      [
+        {
+          id: "path-change-1",
+          reason: "note-move",
+          affectedNoteIds: ["note-1"],
+          pathChanges: [
+            {
+              noteId: "note-1",
+              previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+              nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+            },
+          ],
+          steps: [
+            { id: "file-move", status: "completed" },
+            { id: "index-refresh", status: "completed" },
+          ],
+        },
+      ],
+    );
+
+    expect(reason).toBeNull();
   });
 });
 
