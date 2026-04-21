@@ -4,10 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createMarkdownNote,
   deleteMarkdownNote,
+  addWorkspace,
+  getActiveWorkspace,
+  listWorkspaces,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
+  removeWorkspace,
+  renameWorkspace,
   scanMarkdownWorkspace,
+  switchWorkspace,
   writeMarkdownNote,
 } from "./commands";
 
@@ -156,6 +162,71 @@ describe("desktop command wrappers", () => {
     });
   });
 
+  it("loads workspace metadata from the desktop host", async () => {
+    invokeMock.mockResolvedValue([
+      {
+        id: "default",
+        name: "Personal Notes",
+        rootPath: "/Users/me/Library/Application Support/grove/workspaces/default",
+        lastOpenedAtUnixMs: 1776265200000,
+      },
+    ]);
+
+    await expect(listWorkspaces()).resolves.toStrictEqual([
+      {
+        id: "default",
+        name: "Personal Notes",
+        rootPath: "/Users/me/Library/Application Support/grove/workspaces/default",
+        lastOpenedAtUnixMs: 1776265200000,
+      },
+    ]);
+    expect(invokeMock).toHaveBeenCalledWith("list_workspaces", {});
+  });
+
+  it("loads the active workspace from the desktop host", async () => {
+    invokeMock.mockResolvedValue({
+      id: "default",
+      name: "Personal Notes",
+      rootPath: "/Users/me/Library/Application Support/grove/workspaces/default",
+      lastOpenedAtUnixMs: 1776265200000,
+    });
+
+    await expect(getActiveWorkspace()).resolves.toStrictEqual({
+      id: "default",
+      name: "Personal Notes",
+      rootPath: "/Users/me/Library/Application Support/grove/workspaces/default",
+      lastOpenedAtUnixMs: 1776265200000,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("get_active_workspace", {});
+  });
+
+  it("invokes workspace mutation commands with typed payloads", async () => {
+    invokeMock.mockResolvedValue({
+      id: "research",
+      name: "Research",
+      rootPath: "/Users/me/Notes/Research",
+      lastOpenedAtUnixMs: 1776265200000,
+    });
+
+    await addWorkspace({ name: "Research", rootPath: "/Users/me/Notes/Research" });
+    await switchWorkspace({ id: "research" });
+    await renameWorkspace({ id: "research", name: "Archive" });
+    await removeWorkspace({ id: "research" });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "add_workspace", {
+      workspace: { name: "Research", rootPath: "/Users/me/Notes/Research" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "switch_workspace", {
+      workspace: { id: "research" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "rename_workspace", {
+      workspace: { id: "research", name: "Archive" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "remove_workspace", {
+      workspace: { id: "research" },
+    });
+  });
+
   it("rejects invalid Markdown note read results", async () => {
     invokeMock.mockResolvedValue({ content: "# Plan" });
 
@@ -192,6 +263,17 @@ describe("desktop command wrappers", () => {
     ]);
 
     await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
+  });
+
+  it("rejects invalid workspace command results", async () => {
+    invokeMock.mockResolvedValue({
+      id: "default",
+      name: "Personal Notes",
+      rootPath: "",
+      lastOpenedAtUnixMs: Number.NaN,
+    });
+
+    await expect(getActiveWorkspace()).rejects.toThrow("invalid workspace metadata");
   });
 
   it("preserves structured Tauri command messages when a command fails", async () => {

@@ -18,6 +18,13 @@ export type ScannedMarkdownNote = {
   updatedAtUnixMs: number;
 };
 
+export type DesktopWorkspace = {
+  id: string;
+  name: string;
+  rootPath: string;
+  lastOpenedAtUnixMs: number;
+};
+
 export type CreateMarkdownNoteCommand = {
   path: string;
   content: string;
@@ -35,6 +42,78 @@ export type WriteMarkdownNoteCommand = {
 export type DeleteMarkdownNoteCommand = {
   path: string;
 };
+
+export type AddWorkspaceCommand = {
+  name: string;
+  rootPath: string;
+};
+
+export type SwitchWorkspaceCommand = {
+  id: string;
+};
+
+export type RenameWorkspaceCommand = {
+  id: string;
+  name: string;
+};
+
+export type RemoveWorkspaceCommand = {
+  id: string;
+};
+
+export async function listWorkspaces(): Promise<DesktopWorkspace[]> {
+  const result = await invokeCommandResult("list_workspaces", {});
+
+  if (!isDesktopWorkspaces(result)) {
+    throw new Error("The desktop workspace command returned invalid workspace metadata.");
+  }
+
+  return result;
+}
+
+export async function getActiveWorkspace(): Promise<DesktopWorkspace> {
+  const result = await invokeCommandResult("get_active_workspace", {});
+
+  if (!isDesktopWorkspace(result)) {
+    throw new Error("The desktop workspace command returned invalid workspace metadata.");
+  }
+
+  return result;
+}
+
+export async function addWorkspace(command: AddWorkspaceCommand): Promise<DesktopWorkspace> {
+  const result = await invokeCommandResult("add_workspace", { workspace: command });
+
+  if (!isDesktopWorkspace(result)) {
+    throw new Error("The desktop workspace command returned invalid workspace metadata.");
+  }
+
+  return result;
+}
+
+export async function switchWorkspace(command: SwitchWorkspaceCommand): Promise<DesktopWorkspace> {
+  const result = await invokeCommandResult("switch_workspace", { workspace: command });
+
+  if (!isDesktopWorkspace(result)) {
+    throw new Error("The desktop workspace command returned invalid workspace metadata.");
+  }
+
+  return result;
+}
+
+export async function renameWorkspace(command: RenameWorkspaceCommand): Promise<DesktopWorkspace> {
+  const result = await invokeCommandResult("rename_workspace", { workspace: command });
+
+  if (!isDesktopWorkspace(result)) {
+    throw new Error("The desktop workspace command returned invalid workspace metadata.");
+  }
+
+  return result;
+}
+
+export async function removeWorkspace(command: RemoveWorkspaceCommand): Promise<void> {
+  await invokeCommand("remove_workspace", { workspace: command });
+}
 
 export async function moveMarkdownFile(command: MoveMarkdownFileCommand): Promise<void> {
   await invokeCommand("move_markdown_file", { change: command });
@@ -134,6 +213,30 @@ function isCommandErrorPayload(error: unknown): error is { message: string } {
 
 function isScannedMarkdownNotes(value: unknown): value is ScannedMarkdownNote[] {
   return Array.isArray(value) && value.every(isScannedMarkdownNote);
+}
+
+function isDesktopWorkspaces(value: unknown): value is DesktopWorkspace[] {
+  return Array.isArray(value) && value.every(isDesktopWorkspace);
+}
+
+function isDesktopWorkspace(value: unknown): value is DesktopWorkspace {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    value.name.trim().length > 0 &&
+    "rootPath" in value &&
+    typeof value.rootPath === "string" &&
+    value.rootPath.trim().length > 0 &&
+    "lastOpenedAtUnixMs" in value &&
+    typeof value.lastOpenedAtUnixMs === "number" &&
+    Number.isFinite(value.lastOpenedAtUnixMs) &&
+    value.lastOpenedAtUnixMs >= 0
+  );
 }
 
 function isScannedMarkdownNote(value: unknown): value is ScannedMarkdownNote {

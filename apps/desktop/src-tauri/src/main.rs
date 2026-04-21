@@ -1,10 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
+    future::Future,
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -50,6 +52,26 @@ struct DeleteMarkdownNoteRequest {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AddWorkspaceRequest {
+    name: String,
+    root_path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceIdRequest {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RenameWorkspaceRequest {
+    id: String,
+    name: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum IndexRefreshReason {
@@ -77,6 +99,25 @@ struct ScannedMarkdownNote {
     updated_at_unix_ms: u128,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopWorkspace {
+    id: String,
+    name: String,
+    root_path: PathBuf,
+    last_opened_at_unix_ms: u128,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceRegistry {
+    active_workspace_id: String,
+    workspaces: Vec<DesktopWorkspace>,
+}
+
+#[derive(Default)]
+struct WorkspaceRegistryMutationLock(tokio::sync::Mutex<()>);
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CommandError {
@@ -93,9 +134,113 @@ impl CommandError {
     }
 }
 
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CommandError {}
+
+#[tauri::command]
+async fn list_workspaces(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+) -> Result<Vec<DesktopWorkspace>, CommandError> {
+    let registry = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        load_or_create_app_workspace_registry(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+
+    Ok(registry.workspaces)
+}
+
+#[tauri::command]
+async fn get_active_workspace(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+) -> Result<DesktopWorkspace, CommandError> {
+    let registry = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        load_or_create_app_workspace_registry(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_registry_unavailable", error.to_string()))?;
+
+    active_workspace_from_registry(&registry)
+        .cloned()
+        .map_err(|error| CommandError::new("active_workspace_unavailable", error.to_string()))
+}
+
+#[tauri::command]
+async fn add_workspace(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+    workspace: AddWorkspaceRequest,
+) -> Result<DesktopWorkspace, CommandError> {
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))?;
+
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        add_and_activate_workspace_in_registry(&app_data_dir, &workspace.name, workspace.root_path)
+            .await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_add_failed", error.to_string()))
+}
+
+#[tauri::command]
+async fn switch_workspace(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+    workspace: WorkspaceIdRequest,
+) -> Result<DesktopWorkspace, CommandError> {
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))?;
+
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        switch_active_workspace_in_registry(&app_data_dir, &workspace.id).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_switch_failed", error.to_string()))
+}
+
+#[tauri::command]
+async fn rename_workspace(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+    workspace: RenameWorkspaceRequest,
+) -> Result<DesktopWorkspace, CommandError> {
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))?;
+
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        rename_workspace_in_registry(&app_data_dir, &workspace.id, &workspace.name).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_rename_failed", error.to_string()))
+}
+
+#[tauri::command]
+async fn remove_workspace(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+    workspace: WorkspaceIdRequest,
+) -> Result<(), CommandError> {
+    let app_data_dir = app_data_dir(&app_handle)
+        .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))?;
+
+    run_locked_workspace_registry_mutation(lock.inner(), || async move {
+        remove_workspace_from_registry(&app_data_dir, &workspace.id).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_remove_failed", error.to_string()))
+}
+
 #[tauri::command]
 async fn move_markdown_file(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     change: MarkdownPathChange,
 ) -> Result<(), CommandError> {
     if change.note_id.trim().is_empty() {
@@ -105,7 +250,11 @@ async fn move_markdown_file(
         ));
     }
 
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))?;
     let previous_path = resolve_markdown_path(&workspace_root, &change.previous_path)?;
     let next_path = resolve_markdown_path(&workspace_root, &change.next_path)?;
 
@@ -138,8 +287,13 @@ async fn refresh_note_indexes(
 #[tauri::command]
 async fn scan_markdown_workspace(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
 ) -> Result<Vec<ScannedMarkdownNote>, CommandError> {
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
 
     tokio::fs::create_dir_all(&workspace_root)
         .await
@@ -153,9 +307,14 @@ async fn scan_markdown_workspace(
 #[tauri::command]
 async fn read_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: ReadMarkdownNoteRequest,
 ) -> Result<String, CommandError> {
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_read_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     read_markdown_file(&note_path)
@@ -166,9 +325,14 @@ async fn read_markdown_note(
 #[tauri::command]
 async fn create_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: CreateMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_create_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     create_markdown_file(&note_path, note.content.as_bytes())
@@ -183,9 +347,14 @@ async fn create_markdown_note(
 #[tauri::command]
 async fn write_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: WriteMarkdownNoteRequest,
 ) -> Result<ScannedMarkdownNote, CommandError> {
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_write_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     write_markdown_file(&note_path, note.content.as_bytes())
@@ -200,9 +369,14 @@ async fn write_markdown_note(
 #[tauri::command]
 async fn delete_markdown_note(
     app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
     note: DeleteMarkdownNoteRequest,
 ) -> Result<(), CommandError> {
-    let workspace_root = default_workspace_root(&app_handle)?;
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("note_delete_failed", error.to_string()))?;
     let note_path = resolve_markdown_path(&workspace_root, &note.path)?;
 
     delete_markdown_file(&note_path)
@@ -212,13 +386,20 @@ async fn delete_markdown_note(
 
 fn main() {
     if let Err(error) = tauri::Builder::default()
+        .manage(WorkspaceRegistryMutationLock::default())
         .invoke_handler(tauri::generate_handler![
+            add_workspace,
             create_markdown_note,
             delete_markdown_note,
+            get_active_workspace,
+            list_workspaces,
             move_markdown_file,
             read_markdown_note,
             refresh_note_indexes,
+            remove_workspace,
+            rename_workspace,
             scan_markdown_workspace,
+            switch_workspace,
             write_markdown_note
         ])
         .run(tauri::generate_context!())
@@ -227,12 +408,424 @@ fn main() {
     }
 }
 
-fn default_workspace_root(app_handle: &tauri::AppHandle) -> Result<PathBuf, CommandError> {
+async fn run_locked_workspace_registry_mutation<T, F, Fut>(
+    lock: &WorkspaceRegistryMutationLock,
+    mutation: F,
+) -> anyhow::Result<T>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+{
+    let _guard = lock.0.lock().await;
+
+    mutation().await
+}
+
+fn app_data_dir(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     app_handle
         .path()
         .app_data_dir()
-        .map(|path| path.join("workspaces").join("default"))
-        .map_err(|error| CommandError::new("workspace_root_unavailable", error.to_string()))
+        .context("App data directory is unavailable.")
+}
+
+async fn active_workspace_root(app_handle: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let registry = load_or_create_app_workspace_registry(app_handle).await?;
+    let workspace = active_workspace_from_registry(&registry)?;
+
+    tokio::fs::create_dir_all(&workspace.root_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace root is unavailable: {}",
+                workspace.root_path.display()
+            )
+        })?;
+
+    Ok(workspace.root_path.clone())
+}
+
+async fn load_or_create_app_workspace_registry(
+    app_handle: &tauri::AppHandle,
+) -> anyhow::Result<WorkspaceRegistry> {
+    load_or_create_workspace_registry(&app_data_dir(app_handle)?).await
+}
+
+fn default_workspace_root_from_app_data_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("workspaces").join("default")
+}
+
+fn workspace_registry_path(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("workspace-registry.json")
+}
+
+fn default_workspace(app_data_dir: &Path, last_opened_at_unix_ms: u128) -> DesktopWorkspace {
+    DesktopWorkspace {
+        id: "default".to_string(),
+        name: "Personal Notes".to_string(),
+        root_path: default_workspace_root_from_app_data_dir(app_data_dir),
+        last_opened_at_unix_ms,
+    }
+}
+
+async fn load_or_create_workspace_registry(
+    app_data_dir: &Path,
+) -> anyhow::Result<WorkspaceRegistry> {
+    let registry_path = workspace_registry_path(app_data_dir);
+
+    if !tokio::fs::try_exists(&registry_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace registry is unavailable: {}",
+                registry_path.display()
+            )
+        })?
+    {
+        let registry = WorkspaceRegistry {
+            active_workspace_id: "default".to_string(),
+            workspaces: vec![default_workspace(app_data_dir, current_unix_ms()?)],
+        };
+        tokio::fs::create_dir_all(default_workspace_root_from_app_data_dir(app_data_dir))
+            .await
+            .context("Default workspace root is unavailable.")?;
+        save_workspace_registry(app_data_dir, &registry).await?;
+        return Ok(registry);
+    }
+
+    let registry_content = tokio::fs::read_to_string(&registry_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace registry is unavailable: {}",
+                registry_path.display()
+            )
+        })?;
+    let mut registry: WorkspaceRegistry =
+        serde_json::from_str(&registry_content).context("Workspace registry is invalid.")?;
+
+    if registry.workspaces.is_empty() {
+        registry.active_workspace_id = "default".to_string();
+        registry
+            .workspaces
+            .push(default_workspace(app_data_dir, current_unix_ms()?));
+        save_workspace_registry(app_data_dir, &registry).await?;
+    }
+
+    if find_active_workspace(&registry).is_none() {
+        registry.active_workspace_id = registry.workspaces[0].id.clone();
+        save_workspace_registry(app_data_dir, &registry).await?;
+    }
+
+    Ok(registry)
+}
+
+async fn add_and_activate_workspace_in_registry(
+    app_data_dir: &Path,
+    name: &str,
+    root_path: PathBuf,
+) -> anyhow::Result<DesktopWorkspace> {
+    let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
+    let name = validate_workspace_name(name)?;
+    let root_path = validate_workspace_root_path(root_path)?;
+
+    if workspace_root_is_registered(&registry, &root_path).await? {
+        bail!("That workspace root is already registered.");
+    }
+
+    let root_path = prepare_workspace_root(root_path).await?;
+
+    let workspace = DesktopWorkspace {
+        id: create_workspace_id(&name, &registry.workspaces),
+        name,
+        root_path,
+        last_opened_at_unix_ms: current_unix_ms()?,
+    };
+    registry.active_workspace_id = workspace.id.clone();
+    registry.workspaces.push(workspace.clone());
+    save_workspace_registry(app_data_dir, &registry).await?;
+
+    Ok(workspace)
+}
+
+async fn switch_active_workspace_in_registry(
+    app_data_dir: &Path,
+    workspace_id: &str,
+) -> anyhow::Result<DesktopWorkspace> {
+    let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
+    let workspace_index = find_workspace_index(&registry, workspace_id)?;
+    registry.active_workspace_id = workspace_id.to_string();
+    registry.workspaces[workspace_index].last_opened_at_unix_ms = current_unix_ms()?;
+    let workspace = registry.workspaces[workspace_index].clone();
+    tokio::fs::create_dir_all(&workspace.root_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace root is unavailable: {}",
+                workspace.root_path.display()
+            )
+        })?;
+    save_workspace_registry(app_data_dir, &registry).await?;
+
+    Ok(workspace)
+}
+
+async fn rename_workspace_in_registry(
+    app_data_dir: &Path,
+    workspace_id: &str,
+    name: &str,
+) -> anyhow::Result<DesktopWorkspace> {
+    let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
+    let workspace_index = find_workspace_index(&registry, workspace_id)?;
+    registry.workspaces[workspace_index].name = validate_workspace_name(name)?;
+    let workspace = registry.workspaces[workspace_index].clone();
+    save_workspace_registry(app_data_dir, &registry).await?;
+
+    Ok(workspace)
+}
+
+async fn remove_workspace_from_registry(
+    app_data_dir: &Path,
+    workspace_id: &str,
+) -> anyhow::Result<()> {
+    let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
+    find_workspace_index(&registry, workspace_id)?;
+    registry
+        .workspaces
+        .retain(|workspace| workspace.id != workspace_id);
+
+    if registry.workspaces.is_empty() {
+        registry.active_workspace_id = "default".to_string();
+        registry
+            .workspaces
+            .push(default_workspace(app_data_dir, current_unix_ms()?));
+    } else if registry.active_workspace_id == workspace_id {
+        let active_workspace_id = registry
+            .workspaces
+            .iter()
+            .max_by_key(|workspace| workspace.last_opened_at_unix_ms)
+            .map(|workspace| workspace.id.clone())
+            .context("The active workspace is unavailable.")?;
+        registry.active_workspace_id = active_workspace_id;
+    }
+
+    save_workspace_registry(app_data_dir, &registry).await
+}
+
+async fn save_workspace_registry(
+    app_data_dir: &Path,
+    registry: &WorkspaceRegistry,
+) -> anyhow::Result<()> {
+    tokio::fs::create_dir_all(app_data_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace registry directory is unavailable: {}",
+                app_data_dir.display()
+            )
+        })?;
+
+    let registry_path = workspace_registry_path(app_data_dir);
+    let registry_json = serde_json::to_vec_pretty(registry)
+        .context("Workspace registry could not be serialized.")?;
+    let temporary_path = registry_path.with_extension("json.tmp");
+
+    tokio::fs::write(&temporary_path, registry_json)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace registry temporary file is unavailable: {}",
+                temporary_path.display()
+            )
+        })?;
+    replace_file_with_temporary_path(&temporary_path, &registry_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace registry file is unavailable: {}",
+                registry_path.display()
+            )
+        })
+}
+
+fn validate_workspace_root_path(root_path: PathBuf) -> anyhow::Result<PathBuf> {
+    if root_path.as_os_str().is_empty() || !root_path.is_absolute() {
+        bail!("Workspace roots must be absolute paths.");
+    }
+
+    Ok(lexically_normalize_path(&root_path))
+}
+
+fn lexically_normalize_path(path: &Path) -> PathBuf {
+    let mut normalized_path = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized_path.push(prefix.as_os_str()),
+            Component::RootDir => normalized_path.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized_path.pop();
+            }
+            Component::Normal(segment) => normalized_path.push(segment),
+        }
+    }
+
+    normalized_path
+}
+
+async fn prepare_workspace_root(root_path: PathBuf) -> anyhow::Result<PathBuf> {
+    if tokio::fs::try_exists(&root_path)
+        .await
+        .with_context(|| format!("Workspace root cannot be checked: {}", root_path.display()))?
+        && !tokio::fs::metadata(&root_path)
+            .await
+            .with_context(|| {
+                format!(
+                    "Workspace root metadata is unavailable: {}",
+                    root_path.display()
+                )
+            })?
+            .is_dir()
+    {
+        bail!("Workspace roots must point to a directory.");
+    }
+
+    tokio::fs::create_dir_all(&root_path)
+        .await
+        .with_context(|| {
+            format!(
+                "Workspace root could not be created: {}",
+                root_path.display()
+            )
+        })?;
+
+    tokio::fs::canonicalize(&root_path).await.with_context(|| {
+        format!(
+            "Workspace root could not be resolved: {}",
+            root_path.display()
+        )
+    })
+}
+
+async fn workspace_root_is_registered(
+    registry: &WorkspaceRegistry,
+    root_path: &Path,
+) -> anyhow::Result<bool> {
+    let canonical_root_path = canonicalize_existing_path(root_path).await?;
+
+    for workspace in &registry.workspaces {
+        if workspace.root_path == root_path {
+            return Ok(true);
+        }
+
+        if canonical_root_path
+            .as_ref()
+            .is_some_and(|path| path == &workspace.root_path)
+        {
+            return Ok(true);
+        }
+
+        if let Some(canonical_registered_root_path) =
+            canonicalize_existing_path(&workspace.root_path).await?
+        {
+            if Some(&canonical_registered_root_path) == canonical_root_path.as_ref() {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+async fn canonicalize_existing_path(path: &Path) -> anyhow::Result<Option<PathBuf>> {
+    if !tokio::fs::try_exists(path)
+        .await
+        .with_context(|| format!("Workspace root cannot be checked: {}", path.display()))?
+    {
+        return Ok(None);
+    }
+
+    tokio::fs::canonicalize(path)
+        .await
+        .map(Some)
+        .with_context(|| format!("Workspace root could not be resolved: {}", path.display()))
+}
+
+fn validate_workspace_name(name: &str) -> anyhow::Result<String> {
+    let name = name.trim();
+
+    if name.is_empty() {
+        bail!("A workspace name is required.");
+    }
+
+    Ok(name.to_string())
+}
+
+fn find_workspace_index(registry: &WorkspaceRegistry, workspace_id: &str) -> anyhow::Result<usize> {
+    registry
+        .workspaces
+        .iter()
+        .position(|workspace| workspace.id == workspace_id)
+        .context("The requested workspace is not registered.")
+}
+
+fn find_active_workspace(registry: &WorkspaceRegistry) -> Option<&DesktopWorkspace> {
+    registry
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.id == registry.active_workspace_id)
+}
+
+fn active_workspace_from_registry(
+    registry: &WorkspaceRegistry,
+) -> anyhow::Result<&DesktopWorkspace> {
+    find_active_workspace(registry).context("The active workspace is unavailable.")
+}
+
+fn create_workspace_id(name: &str, workspaces: &[DesktopWorkspace]) -> String {
+    let base_id = slugify_workspace_name(name);
+    let mut candidate = base_id.clone();
+    let mut suffix = 2;
+
+    while workspaces.iter().any(|workspace| workspace.id == candidate) {
+        candidate = format!("{base_id}-{suffix}");
+        suffix += 1;
+    }
+
+    candidate
+}
+
+fn slugify_workspace_name(name: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_separator = false;
+
+    for character in name.chars().flat_map(char::to_lowercase) {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+            previous_was_separator = false;
+            continue;
+        }
+
+        if !slug.is_empty() && !previous_was_separator {
+            slug.push('-');
+            previous_was_separator = true;
+        }
+    }
+
+    let slug = slug.trim_matches('-');
+
+    if slug.is_empty() {
+        return "workspace".to_string();
+    }
+
+    slug.to_string()
+}
+
+fn current_unix_ms() -> anyhow::Result<u128> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .context("System time is unavailable.")
 }
 
 fn resolve_markdown_path(workspace_root: &Path, path: &str) -> Result<PathBuf, CommandError> {
@@ -666,14 +1259,21 @@ async fn append_index_refresh_sidecar_entry(
 mod tests {
     use std::{
         path::PathBuf,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use super::{
-        create_markdown_file, delete_markdown_file, derive_markdown_title, find_first_markdown_heading,
-        get_temporary_write_path,
-        get_workspace_relative_markdown_path, move_file_without_overwrite, read_markdown_file,
-        scan_markdown_files, system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        add_and_activate_workspace_in_registry, create_markdown_file, delete_markdown_file,
+        derive_markdown_title, find_first_markdown_heading, get_temporary_write_path,
+        get_workspace_relative_markdown_path, load_or_create_workspace_registry,
+        move_file_without_overwrite, read_markdown_file, remove_workspace_from_registry,
+        rename_workspace_in_registry, run_locked_workspace_registry_mutation, scan_markdown_files,
+        system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
+        WorkspaceRegistryMutationLock,
     };
 
     fn run_async<F>(future: F) -> F::Output
@@ -738,6 +1338,223 @@ mod tests {
     }
 
     #[test]
+    fn creates_a_default_workspace_registry_on_first_run() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("creates-default-workspace-registry");
+
+            let registry = load_or_create_workspace_registry(&app_data_dir).await?;
+
+            assert_eq!(registry.active_workspace_id, "default");
+            assert_eq!(registry.workspaces.len(), 1);
+            assert_eq!(registry.workspaces[0].id, "default");
+            assert_eq!(registry.workspaces[0].name, "Personal Notes");
+            assert_eq!(
+                registry.workspaces[0].root_path,
+                app_data_dir.join("workspaces").join("default")
+            );
+            assert!(tokio::fs::try_exists(app_data_dir.join("workspace-registry.json")).await?);
+            assert!(tokio::fs::try_exists(&registry.workspaces[0].root_path).await?);
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("default workspace registry should be created");
+    }
+
+    #[test]
+    fn adding_workspace_persists_it_and_makes_it_active() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("persists-added-workspace");
+            let workspace_root = unique_test_dir("external-workspace-root");
+            tokio::fs::create_dir_all(&workspace_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+            let canonical_workspace_root = tokio::fs::canonicalize(&workspace_root).await?;
+
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
+            let registry = load_or_create_workspace_registry(&app_data_dir).await?;
+
+            assert_eq!(registry.active_workspace_id, added_workspace.id);
+            assert!(registry
+                .workspaces
+                .iter()
+                .any(|workspace| workspace.name == "Research"
+                    && workspace.root_path == canonical_workspace_root));
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("added workspace should persist and become switchable");
+    }
+
+    #[test]
+    fn renames_and_removes_workspaces_without_deleting_markdown_files() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("renames-and-removes-workspace");
+            let workspace_root = unique_test_dir("workspace-to-remove");
+            let note_path = workspace_root.join("Plan.md");
+            tokio::fs::create_dir_all(&workspace_root).await?;
+            tokio::fs::write(&note_path, "# Plan").await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
+
+            rename_workspace_in_registry(&app_data_dir, &added_workspace.id, "Archive").await?;
+            remove_workspace_from_registry(&app_data_dir, &added_workspace.id).await?;
+            let registry = load_or_create_workspace_registry(&app_data_dir).await?;
+
+            assert!(!registry
+                .workspaces
+                .iter()
+                .any(|workspace| workspace.id == added_workspace.id));
+            assert!(tokio::fs::try_exists(&note_path).await?);
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace metadata removal should preserve files");
+    }
+
+    #[test]
+    fn rejects_invalid_workspace_roots() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("rejects-invalid-workspace-roots");
+            load_or_create_workspace_registry(&app_data_dir).await?;
+
+            let error = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Relative",
+                PathBuf::from("Notes"),
+            )
+            .await
+            .expect_err("relative workspace roots should be rejected");
+
+            assert!(error.to_string().contains("absolute paths"));
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("invalid workspace root test should run");
+    }
+
+    #[test]
+    fn rejects_duplicate_workspace_roots_without_creating_new_directories() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("rejects-duplicate-without-creating");
+            let workspace_root = unique_test_dir("existing-workspace-root");
+            let duplicate_child = workspace_root.join("CreatedByRejectedAdd");
+            let duplicate_root = duplicate_child.join("..");
+            tokio::fs::create_dir_all(&workspace_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+            add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
+
+            let error = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Duplicate Research",
+                duplicate_root,
+            )
+            .await
+            .expect_err("duplicate workspace roots should be rejected");
+
+            assert!(error.to_string().contains("already registered"));
+            assert!(!tokio::fs::try_exists(&duplicate_child).await?);
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("duplicate workspace root test should run");
+    }
+
+    #[test]
+    fn canonicalizes_workspace_roots_before_persisting() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("canonicalizes-workspace-root");
+            let workspace_root = unique_test_dir("canonical-workspace-root");
+            let nested_root = workspace_root.join("Nested");
+            let noncanonical_root = nested_root.join("..").join("Nested");
+            tokio::fs::create_dir_all(&nested_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                noncanonical_root,
+            )
+            .await?;
+
+            assert_eq!(
+                added_workspace.root_path,
+                tokio::fs::canonicalize(&nested_root).await?
+            );
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace root should be canonicalized");
+    }
+
+    #[test]
+    fn serializes_workspace_registry_mutations() {
+        run_async(async {
+            let lock = WorkspaceRegistryMutationLock::default();
+            let active_mutations = Arc::new(AtomicUsize::new(0));
+            let max_active_mutations = Arc::new(AtomicUsize::new(0));
+
+            let lock = Arc::new(lock);
+            let first_lock = Arc::clone(&lock);
+            let second_lock = Arc::clone(&lock);
+            let first_active_mutations = Arc::clone(&active_mutations);
+            let first_max_active_mutations = Arc::clone(&max_active_mutations);
+            let second_active_mutations = Arc::clone(&active_mutations);
+            let second_max_active_mutations = Arc::clone(&max_active_mutations);
+
+            let first_mutation = tokio::spawn(async move {
+                run_locked_workspace_registry_mutation(&first_lock, || {
+                    let active_mutations = Arc::clone(&first_active_mutations);
+                    let max_active_mutations = Arc::clone(&first_max_active_mutations);
+                    async move {
+                        let active = active_mutations.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active_mutations.fetch_max(active, Ordering::SeqCst);
+                        tokio::task::yield_now().await;
+                        active_mutations.fetch_sub(1, Ordering::SeqCst);
+                        anyhow::Ok(())
+                    }
+                })
+                .await
+            });
+            let second_mutation = tokio::spawn(async move {
+                let active_mutations = Arc::clone(&second_active_mutations);
+                let max_active_mutations = Arc::clone(&second_max_active_mutations);
+                run_locked_workspace_registry_mutation(&second_lock, || async move {
+                    let active = active_mutations.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_mutations.fetch_max(active, Ordering::SeqCst);
+                    tokio::task::yield_now().await;
+                    active_mutations.fetch_sub(1, Ordering::SeqCst);
+                    anyhow::Ok(())
+                })
+                .await
+            });
+
+            first_mutation.await??;
+            second_mutation.await??;
+            assert_eq!(max_active_mutations.load(Ordering::SeqCst), 1);
+            anyhow::Ok(())
+        })
+        .expect("registry mutations should be serialized");
+    }
+
+    #[test]
     fn derives_workspace_relative_markdown_paths() {
         let workspace_dir = PathBuf::from("/workspace");
         let markdown_path = workspace_dir.join("Projects").join("Grove").join("Plan.md");
@@ -784,7 +1601,10 @@ mod tests {
 
     #[test]
     fn derives_title_from_first_h1_before_the_file_stem() {
-        assert_eq!(derive_markdown_title("## Context\n# Plan ###", "Fallback"), "Plan");
+        assert_eq!(
+            derive_markdown_title("## Context\n# Plan ###", "Fallback"),
+            "Plan"
+        );
     }
 
     #[test]
