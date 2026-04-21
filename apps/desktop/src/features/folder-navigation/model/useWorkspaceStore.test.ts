@@ -77,6 +77,26 @@ describe("loadWorkspaces", () => {
     expect(state.loadState.errorMessage).toBe("No workspace found");
     expect(state.activeWorkspace).toBeNull();
   });
+
+  it("clears stale workspace data when reloading fails after a previous success", async () => {
+    useWorkspaceStore.setState({
+      activeWorkspace: workspaceA,
+      allWorkspaces: [workspaceA, workspaceB],
+      loadState: { status: "ready", errorMessage: null },
+    });
+    getActiveWorkspaceMock.mockRejectedValue(new Error("No workspace found"));
+    listWorkspacesMock.mockResolvedValue([]);
+
+    await useWorkspaceStore.getState().loadWorkspaces();
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeWorkspace).toBeNull();
+    expect(state.allWorkspaces).toEqual([]);
+    expect(state.loadState).toEqual({
+      status: "failed",
+      errorMessage: "No workspace found",
+    });
+  });
 });
 
 describe("switchTo", () => {
@@ -84,11 +104,15 @@ describe("switchTo", () => {
     const switched = { ...workspaceB, lastOpenedAtUnixMs: 4000 };
     switchWorkspaceMock.mockResolvedValue(switched);
     listWorkspacesMock.mockResolvedValue([workspaceA, switched]);
+    useWorkspaceStore.setState({
+      loadState: { status: "failed", errorMessage: "No workspace found" },
+    });
 
     await useWorkspaceStore.getState().switchTo("ws-b");
 
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace).toEqual(switched);
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
     expect(switchWorkspaceMock).toHaveBeenCalledWith({ id: "ws-b" });
   });
 });
@@ -103,11 +127,15 @@ describe("addNew", () => {
     };
     addWorkspaceMock.mockResolvedValue(newWorkspace);
     listWorkspacesMock.mockResolvedValue([workspaceA, newWorkspace]);
+    useWorkspaceStore.setState({
+      loadState: { status: "failed", errorMessage: "No workspace found" },
+    });
 
     await useWorkspaceStore.getState().addNew("Research", "/Users/me/research");
 
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace).toEqual(newWorkspace);
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
     expect(addWorkspaceMock).toHaveBeenCalledWith({ name: "Research", rootPath: "/Users/me/research" });
   });
 });
@@ -119,6 +147,7 @@ describe("renameCurrent", () => {
     useWorkspaceStore.setState({
       activeWorkspace: workspaceA,
       allWorkspaces: [workspaceA, workspaceB],
+      loadState: { status: "failed", errorMessage: "No workspace found" },
     });
 
     await useWorkspaceStore.getState().renameCurrent("ws-a", "My Notes");
@@ -126,6 +155,7 @@ describe("renameCurrent", () => {
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace?.name).toBe("My Notes");
     expect(state.allWorkspaces.find((ws) => ws.id === "ws-a")?.name).toBe("My Notes");
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
     expect(renameWorkspaceMock).toHaveBeenCalledWith({ id: "ws-a", name: "My Notes" });
   });
 });
@@ -139,6 +169,7 @@ describe("removeCurrent", () => {
     useWorkspaceStore.setState({
       activeWorkspace: workspaceA,
       allWorkspaces: [workspaceA, workspaceB],
+      loadState: { status: "failed", errorMessage: "No workspace found" },
     });
 
     await useWorkspaceStore.getState().removeCurrent("ws-a");
@@ -146,7 +177,27 @@ describe("removeCurrent", () => {
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace).toEqual(workspaceB);
     expect(state.allWorkspaces).toEqual([workspaceB]);
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
     expect(removeWorkspaceMock).toHaveBeenCalledWith({ id: "ws-a" });
+  });
+
+  it("clears the failed load state when the last workspace is removed", async () => {
+    removeWorkspaceMock.mockResolvedValue(undefined);
+    listWorkspacesMock.mockResolvedValue([]);
+    getActiveWorkspaceMock.mockRejectedValue(new Error("No workspace found"));
+
+    useWorkspaceStore.setState({
+      activeWorkspace: workspaceA,
+      allWorkspaces: [workspaceA],
+      loadState: { status: "failed", errorMessage: "No workspace found" },
+    });
+
+    await useWorkspaceStore.getState().removeCurrent("ws-a");
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeWorkspace).toBeNull();
+    expect(state.allWorkspaces).toEqual([]);
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
   });
 });
 
