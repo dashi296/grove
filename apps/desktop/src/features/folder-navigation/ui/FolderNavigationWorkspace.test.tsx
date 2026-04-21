@@ -7,7 +7,10 @@ import {
   FolderNavigationWorkspaceContent,
   NavigationPane,
   WorkspaceSwitcher,
+  getActiveWorkspaceName,
   getFolderNavigationWorkspaceClassName,
+  getScanStateWithoutActiveWorkspace,
+  getWorkspaceSwitchBlockedReason,
 } from "./FolderNavigationWorkspace";
 
 describe("getFolderNavigationWorkspaceClassName", () => {
@@ -100,6 +103,13 @@ describe("NavigationPane", () => {
         onCreateTitleChange={() => {}}
         onCreateNote={() => {}}
         onSelectNote={() => {}}
+        activeWorkspaceName=""
+        recentWorkspaces={[]}
+        switchBlockedReason={null}
+        onSwitchWorkspace={() => Promise.resolve()}
+        onAddWorkspace={() => Promise.resolve()}
+        onRenameWorkspace={() => Promise.resolve()}
+        onRemoveWorkspace={() => Promise.resolve()}
         {...overrides}
       />,
     );
@@ -124,7 +134,15 @@ describe("NavigationPane", () => {
   });
 
   it("places the workspace switcher in the Library column", () => {
-    const markup = renderNavigationPaneMarkup();
+    const markup = renderNavigationPaneMarkup({
+      activeWorkspaceName: "Personal Notes",
+      recentWorkspaces: [],
+      switchBlockedReason: null,
+      onSwitchWorkspace: () => Promise.resolve(),
+      onAddWorkspace: () => Promise.resolve(),
+      onRenameWorkspace: () => Promise.resolve(),
+      onRemoveWorkspace: () => Promise.resolve(),
+    });
 
     expect(markup).toContain("folder-navigation__workspace-switcher");
     expect(markup).toContain("Personal Notes");
@@ -133,13 +151,19 @@ describe("NavigationPane", () => {
 });
 
 describe("WorkspaceSwitcher", () => {
+  const baseWorkspaceSwitcherProps = {
+    activeWorkspaceName: "Personal Notes",
+    recentWorkspaces: [] as { id: string; name: string; rootPath: string; lastOpenedAtUnixMs: number }[],
+    switchBlockedReason: null as string | null,
+    onSwitchWorkspace: () => Promise.resolve(),
+    onAddWorkspace: () => Promise.resolve(),
+    onRenameWorkspace: () => Promise.resolve(),
+    onRemoveWorkspace: () => Promise.resolve(),
+  };
+
   it("connects the trigger to the workspace popover for assistive technology", () => {
     const markup = renderToStaticMarkup(
-      <WorkspaceSwitcher
-        currentWorkspaceName="Personal Notes"
-        recentWorkspaceNames={[]}
-        initiallyOpen={true}
-      />,
+      <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} initiallyOpen={true} />,
     );
     const controlsMatch = markup.match(/aria-controls="([^"]+)"/);
     const idMatch = markup.match(/id="([^"]+)"/);
@@ -152,14 +176,10 @@ describe("WorkspaceSwitcher", () => {
   it("uses unique popover ids when more than one switcher is rendered", () => {
     const markup = renderToStaticMarkup(
       <>
+        <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} initiallyOpen={true} />
         <WorkspaceSwitcher
-          currentWorkspaceName="Personal Notes"
-          recentWorkspaceNames={[]}
-          initiallyOpen={true}
-        />
-        <WorkspaceSwitcher
-          currentWorkspaceName="Archive"
-          recentWorkspaceNames={[]}
+          {...baseWorkspaceSwitcherProps}
+          activeWorkspaceName="Archive"
           initiallyOpen={true}
         />
       </>,
@@ -174,8 +194,11 @@ describe("WorkspaceSwitcher", () => {
   it("opens a lightweight popover with workspace actions and no sync copy", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher
-        currentWorkspaceName="Personal Notes"
-        recentWorkspaceNames={["Research", "Archive"]}
+        {...baseWorkspaceSwitcherProps}
+        recentWorkspaces={[
+          { id: "ws-research", name: "Research", rootPath: "/notes/research", lastOpenedAtUnixMs: 2000 },
+          { id: "ws-archive", name: "Archive", rootPath: "/notes/archive", lastOpenedAtUnixMs: 1000 },
+        ]}
         initiallyOpen={true}
       />,
     );
@@ -188,6 +211,189 @@ describe("WorkspaceSwitcher", () => {
     expect(markup).not.toContain("Synced");
     expect(markup).not.toContain("Sync status");
     expect(markup).not.toContain("Cloud status");
+  });
+
+  it("shows the switch blocked reason when note edits are dirty", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Save or discard the current draft before switching workspaces."
+        recentWorkspaces={[
+          { id: "ws-b", name: "Work Notes", rootPath: "/notes/work", lastOpenedAtUnixMs: 1000 },
+        ]}
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toContain("Save or discard the current draft before switching workspaces.");
+  });
+
+  it("shows the switch blocked reason when path changes are unfinished", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Finish pending path changes before switching workspaces."
+        recentWorkspaces={[
+          { id: "ws-b", name: "Work Notes", rootPath: "/notes/work", lastOpenedAtUnixMs: 1000 },
+        ]}
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toContain("Finish pending path changes before switching workspaces.");
+  });
+
+  it("disables add workspace while note edits are dirty", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Save or discard the current draft before switching workspaces."
+        initiallyOpen={true}
+      />,
+    );
+
+    expect(markup).toMatch(/<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/);
+  });
+
+  it("disables remove workspace while note edits are dirty", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher
+        {...baseWorkspaceSwitcherProps}
+        switchBlockedReason="Save or discard the current draft before switching workspaces."
+        initiallyOpen={true}
+        initialView="settings"
+      />,
+    );
+
+    expect(markup).toMatch(/<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/);
+  });
+
+  it("renders the active workspace name from props", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} activeWorkspaceName="My Research" />,
+    );
+
+    expect(markup).toContain("My Research");
+  });
+});
+
+describe("getWorkspaceSwitchBlockedReason", () => {
+  it("blocks switching when the current note has unsaved edits", () => {
+    const reason = getWorkspaceSwitchBlockedReason(
+      {
+        noteId: "note-1",
+        path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+        baseContent: "before",
+        draftContent: "after",
+        status: "dirty",
+        errorMessage: null,
+      },
+      [],
+    );
+
+    expect(reason).toBe("Save or discard the current draft before switching workspaces.");
+  });
+
+  it("blocks switching when path changes are unfinished", () => {
+    const reason = getWorkspaceSwitchBlockedReason(null, [
+      {
+        id: "path-change-1",
+        reason: "note-move",
+        affectedNoteIds: ["note-1"],
+        pathChanges: [
+          {
+            noteId: "note-1",
+            previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+            nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+          },
+        ],
+        steps: [
+          { id: "file-move", status: "completed" },
+          { id: "index-refresh", status: "pending" },
+        ],
+      },
+    ]);
+
+    expect(reason).toBe("Finish pending path changes before switching workspaces.");
+  });
+
+  it("allows switching when drafts are clean and path changes are complete", () => {
+    const reason = getWorkspaceSwitchBlockedReason(
+      {
+        noteId: "note-1",
+        path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+        baseContent: "same",
+        draftContent: "same",
+        status: "clean",
+        errorMessage: null,
+      },
+      [
+        {
+          id: "path-change-1",
+          reason: "note-move",
+          affectedNoteIds: ["note-1"],
+          pathChanges: [
+            {
+              noteId: "note-1",
+              previousPath: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+              nextPath: normalizeNoteFilePath("Archive/Plan.md"),
+            },
+          ],
+          steps: [
+            { id: "file-move", status: "completed" },
+            { id: "index-refresh", status: "completed" },
+          ],
+        },
+      ],
+    );
+
+    expect(reason).toBeNull();
+  });
+});
+
+describe("getScanStateWithoutActiveWorkspace", () => {
+  it("surfaces workspace load failures instead of leaving the note list loading forever", () => {
+    expect(
+      getScanStateWithoutActiveWorkspace({
+        status: "failed",
+        errorMessage: "No workspace found",
+      }),
+    ).toEqual({
+      status: "failed",
+      errorMessage: "No workspace found",
+    });
+  });
+
+  it("treats a missing active workspace after a successful load as an empty ready state", () => {
+    expect(
+      getScanStateWithoutActiveWorkspace({
+        status: "ready",
+        errorMessage: null,
+      }),
+    ).toEqual({
+      status: "ready",
+      errorMessage: null,
+    });
+  });
+});
+
+describe("getActiveWorkspaceName", () => {
+  it("shows a fallback label when no workspace is selected", () => {
+    expect(
+      getActiveWorkspaceName(null, {
+        status: "ready",
+        errorMessage: null,
+      }),
+    ).toBe("No workspace selected");
+  });
+
+  it("shows that workspaces are unavailable when loading failed", () => {
+    expect(
+      getActiveWorkspaceName(null, {
+        status: "failed",
+        errorMessage: "No workspace found",
+      }),
+    ).toBe("Workspace unavailable");
   });
 });
 

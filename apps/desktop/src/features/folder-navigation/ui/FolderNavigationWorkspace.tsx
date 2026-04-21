@@ -14,6 +14,9 @@ import type { MarkdownCommand, MarkdownSelection } from "@grove/editor";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import type { DesktopWorkspace } from "../../../shared";
+import { getRecentWorkspaces, useWorkspaceStore } from "../model/useWorkspaceStore";
+
 import {
   createMarkdownNote,
   deleteMarkdownNote,
@@ -78,6 +81,16 @@ type FolderNodeProps = {
   onToggle: (path: string) => void;
 };
 
+type WorkspaceSwitcherSlice = {
+  activeWorkspaceName: string;
+  recentWorkspaces: readonly DesktopWorkspace[];
+  switchBlockedReason: string | null;
+  onSwitchWorkspace: (id: string) => Promise<void>;
+  onAddWorkspace: (name: string, rootPath: string) => Promise<void>;
+  onRenameWorkspace: (name: string) => Promise<void>;
+  onRemoveWorkspace: () => Promise<void>;
+};
+
 type SidebarProps = {
   noteCount: number;
   folderTree: readonly FolderTreeNode[];
@@ -85,7 +98,7 @@ type SidebarProps = {
   expandedFolderPaths: readonly string[];
   onSelect: (path: FolderScope) => void;
   onToggle: (path: string) => void;
-};
+} & WorkspaceSwitcherSlice;
 
 type NoteListProps = {
   selectedFolderPath: FolderScope;
@@ -101,16 +114,21 @@ type NoteListProps = {
 
 type NavigationPaneProps = SidebarProps & NoteListProps;
 
-type WorkspaceSwitcherProps = {
-  currentWorkspaceName: string;
-  recentWorkspaceNames: readonly string[];
+type WorkspaceSwitcherProps = WorkspaceSwitcherSlice & {
   initiallyOpen?: boolean;
+  initialView?: PopoverView;
 };
 
-type WorkspaceSwitcherPopoverProps = {
+type PopoverView = "list" | "add" | "settings";
+
+type PopoverOperationState = {
+  status: "idle" | "pending" | "failed";
+  errorMessage: string | null;
+};
+
+type WorkspaceSwitcherPopoverProps = WorkspaceSwitcherSlice & {
   id: string;
-  currentWorkspaceName: string;
-  recentWorkspaceNames: readonly string[];
+  initialView?: PopoverView;
 };
 
 type FolderOption = {
@@ -182,6 +200,11 @@ type WorkspaceScanState = {
   errorMessage: string | null;
 };
 
+type WorkspaceLoadState = {
+  status: "idle" | "loading" | "ready" | "failed";
+  errorMessage: string | null;
+};
+
 type NoteCreateState = {
   status: "idle" | "creating" | "failed";
   errorMessage: string | null;
@@ -240,6 +263,19 @@ function filterNotesByFolderScope(
 
 function getFolderLabel(folderPath: FolderScope): string {
   return folderPath === null ? "Workspace" : getFolderDisplayName(folderPath);
+}
+
+export function getWorkspaceSwitchBlockedReason(
+  noteEditBuffer: NoteEditBuffer | null,
+  pathChangeOperations: readonly FolderWorkspacePathChangeOperation[],
+): string | null {
+  if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
+    return "Save or discard the current draft before switching workspaces.";
+  }
+
+  return pathChangeOperations.some((operation) => !isPathChangeOperationComplete(operation))
+    ? "Finish pending path changes before switching workspaces."
+    : null;
 }
 
 function getFolderPathLabel(folderPath: FolderScope): string {
@@ -325,6 +361,48 @@ function getExpandedFolderPathsForNotes(notes: readonly NoteListItem[]): string[
 
 function getScanErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown workspace scan failed.";
+}
+
+export function getScanStateWithoutActiveWorkspace(
+  workspaceLoadState: WorkspaceLoadState,
+): WorkspaceScanState {
+  if (workspaceLoadState.status === "failed") {
+    return {
+      status: "failed",
+      errorMessage: workspaceLoadState.errorMessage ?? "The workspace operation failed.",
+    };
+  }
+
+  if (workspaceLoadState.status === "loading") {
+    return {
+      status: "loading",
+      errorMessage: null,
+    };
+  }
+
+  return {
+    status: "ready",
+    errorMessage: null,
+  };
+}
+
+export function getActiveWorkspaceName(
+  activeWorkspace: DesktopWorkspace | null,
+  workspaceLoadState: WorkspaceLoadState,
+): string {
+  if (activeWorkspace !== null) {
+    return activeWorkspace.name;
+  }
+
+  if (workspaceLoadState.status === "loading") {
+    return "Loading...";
+  }
+
+  if (workspaceLoadState.status === "failed") {
+    return "Workspace unavailable";
+  }
+
+  return "No workspace selected";
 }
 
 function getNoteReadErrorMessage(error: unknown): string {
@@ -466,6 +544,13 @@ function LibraryColumn({
   expandedFolderPaths,
   onSelect,
   onToggle,
+  activeWorkspaceName,
+  recentWorkspaces,
+  switchBlockedReason,
+  onSwitchWorkspace,
+  onAddWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
 }: SidebarProps) {
   return (
     <aside className="folder-navigation__library-column" aria-label="Library">
@@ -501,15 +586,29 @@ function LibraryColumn({
           </ol>
         </section>
       </div>
-      <WorkspaceSwitcher currentWorkspaceName="Personal Notes" recentWorkspaceNames={[]} />
+      <WorkspaceSwitcher
+        activeWorkspaceName={activeWorkspaceName}
+        recentWorkspaces={recentWorkspaces}
+        switchBlockedReason={switchBlockedReason}
+        onSwitchWorkspace={onSwitchWorkspace}
+        onAddWorkspace={onAddWorkspace}
+        onRenameWorkspace={onRenameWorkspace}
+        onRemoveWorkspace={onRemoveWorkspace}
+      />
     </aside>
   );
 }
 
 export function WorkspaceSwitcher({
-  currentWorkspaceName,
-  recentWorkspaceNames,
+  activeWorkspaceName,
+  recentWorkspaces,
+  switchBlockedReason,
+  onSwitchWorkspace,
+  onAddWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
   initiallyOpen = false,
+  initialView = "list",
 }: WorkspaceSwitcherProps) {
   const popoverId = useId();
   const [isOpen, setIsOpen] = useState(initiallyOpen);
@@ -524,14 +623,32 @@ export function WorkspaceSwitcher({
         aria-haspopup="dialog"
         aria-controls={isOpen ? popoverId : undefined}
       >
-        <span className="folder-navigation__workspace-name">{currentWorkspaceName}</span>
+        <span className="folder-navigation__workspace-name">{activeWorkspaceName}</span>
         <span className="folder-navigation__workspace-hint">Switch workspace</span>
       </button>
       {isOpen ? (
         <WorkspaceSwitcherPopover
           id={popoverId}
-          currentWorkspaceName={currentWorkspaceName}
-          recentWorkspaceNames={recentWorkspaceNames}
+          activeWorkspaceName={activeWorkspaceName}
+          recentWorkspaces={recentWorkspaces}
+          switchBlockedReason={switchBlockedReason}
+          initialView={initialView}
+          onSwitchWorkspace={async (id) => {
+            await onSwitchWorkspace(id);
+            setIsOpen(false);
+          }}
+          onAddWorkspace={async (name, rootPath) => {
+            await onAddWorkspace(name, rootPath);
+            setIsOpen(false);
+          }}
+          onRenameWorkspace={async (name) => {
+            await onRenameWorkspace(name);
+            setIsOpen(false);
+          }}
+          onRemoveWorkspace={async () => {
+            await onRemoveWorkspace();
+            setIsOpen(false);
+          }}
         />
       ) : null}
     </div>
@@ -540,9 +657,105 @@ export function WorkspaceSwitcher({
 
 function WorkspaceSwitcherPopover({
   id,
-  currentWorkspaceName,
-  recentWorkspaceNames,
+  activeWorkspaceName,
+  recentWorkspaces,
+  switchBlockedReason,
+  initialView = "list",
+  onSwitchWorkspace,
+  onAddWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
 }: WorkspaceSwitcherPopoverProps) {
+  const [view, setView] = useState<PopoverView>(initialView);
+  const [operation, setOperation] = useState<PopoverOperationState>({
+    status: "idle",
+    errorMessage: null,
+  });
+  const [addName, setAddName] = useState("");
+  const [addPath, setAddPath] = useState("");
+  const [renameName, setRenameName] = useState(activeWorkspaceName);
+
+  function switchView(nextView: PopoverView): void {
+    setView(nextView);
+    setOperation({ status: "idle", errorMessage: null });
+  }
+
+  function resetToList(): void {
+    switchView("list");
+    setAddName("");
+    setAddPath("");
+    setRenameName(activeWorkspaceName);
+  }
+
+  async function handleSwitch(id: string): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
+    setOperation({ status: "pending", errorMessage: null });
+    try {
+      await onSwitchWorkspace(id);
+    } catch (error) {
+      setOperation({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Failed to switch workspace.",
+      });
+    }
+  }
+
+  async function handleAdd(): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
+    if (addName.trim() === "" || addPath.trim() === "") return;
+    setOperation({ status: "pending", errorMessage: null });
+    try {
+      await onAddWorkspace(addName.trim(), addPath.trim());
+    } catch (error) {
+      setOperation({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Failed to add workspace.",
+      });
+    }
+  }
+
+  async function handleRename(): Promise<void> {
+    if (renameName.trim() === "" || renameName.trim() === activeWorkspaceName) return;
+    setOperation({ status: "pending", errorMessage: null });
+    try {
+      await onRenameWorkspace(renameName.trim());
+    } catch (error) {
+      setOperation({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Failed to rename workspace.",
+      });
+    }
+  }
+
+  async function handleRemove(): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove "${activeWorkspaceName}" from Grove? Your Markdown files will not be deleted.`,
+    );
+    if (!confirmed) return;
+    setOperation({ status: "pending", errorMessage: null });
+    try {
+      await onRemoveWorkspace();
+    } catch (error) {
+      setOperation({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Failed to remove workspace.",
+      });
+    }
+  }
+
   return (
     <div
       id={id}
@@ -551,31 +764,168 @@ function WorkspaceSwitcherPopover({
       aria-label="Workspace switcher"
     >
       <p className="folder-navigation__eyebrow">Current workspace</p>
-      <p className="folder-navigation__workspace-popover-title">{currentWorkspaceName}</p>
-      <div className="folder-navigation__workspace-popover-section">
-        <p className="folder-navigation__group-heading">Recent workspaces</p>
-        {recentWorkspaceNames.length > 0 ? (
-          <ul className="folder-navigation__workspace-list">
-            {recentWorkspaceNames.map((workspaceName) => (
-              <li key={workspaceName}>
-                <button type="button" className="folder-navigation__workspace-action">
-                  {workspaceName}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="folder-navigation__muted">No recent workspaces yet.</p>
-        )}
-      </div>
-      <div className="folder-navigation__workspace-popover-actions">
-        <button type="button" className="folder-navigation__workspace-action">
-          Add workspace
-        </button>
-        <button type="button" className="folder-navigation__workspace-action">
-          Workspace settings
-        </button>
-      </div>
+      <p className="folder-navigation__workspace-popover-title">{activeWorkspaceName}</p>
+
+      {switchBlockedReason !== null ? (
+        <p className="folder-navigation__step-error">{switchBlockedReason}</p>
+      ) : operation.status === "failed" && view === "list" ? (
+        <p className="folder-navigation__step-error">{operation.errorMessage}</p>
+      ) : null}
+
+      {view === "list" ? (
+        <>
+          <div className="folder-navigation__workspace-popover-section">
+            <p className="folder-navigation__group-heading">Recent workspaces</p>
+            {recentWorkspaces.length > 0 ? (
+              <ul className="folder-navigation__workspace-list">
+                {recentWorkspaces.map((workspace) => (
+                  <li key={workspace.id}>
+                    <button
+                      type="button"
+                      className="folder-navigation__workspace-action"
+                      onClick={() => { void handleSwitch(workspace.id); }}
+                      disabled={switchBlockedReason !== null || operation.status === "pending"}
+                    >
+                      {workspace.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="folder-navigation__muted">No recent workspaces yet.</p>
+            )}
+          </div>
+          <div className="folder-navigation__workspace-popover-actions">
+            <button
+              type="button"
+              className="folder-navigation__workspace-action"
+              onClick={() => switchView("add")}
+              disabled={switchBlockedReason !== null}
+            >
+              Add workspace
+            </button>
+            <button
+              type="button"
+              className="folder-navigation__workspace-action"
+              onClick={() => switchView("settings")}
+            >
+              Workspace settings
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {view === "add" ? (
+        <div className="folder-navigation__workspace-popover-section">
+          <p className="folder-navigation__group-heading">Add workspace</p>
+          <div className="folder-navigation__operation">
+            <label className="folder-navigation__label" htmlFor="add-workspace-name">
+              Name
+            </label>
+            <input
+              id="add-workspace-name"
+              className="folder-navigation__input"
+              value={addName}
+              onChange={(event) => setAddName(event.target.value)}
+              placeholder="My Notes"
+              disabled={operation.status === "pending"}
+            />
+            <label className="folder-navigation__label" htmlFor="add-workspace-path">
+              Folder path
+            </label>
+            <input
+              id="add-workspace-path"
+              className="folder-navigation__input"
+              value={addPath}
+              onChange={(event) => setAddPath(event.target.value)}
+              placeholder="/Users/you/Notes"
+              disabled={operation.status === "pending"}
+            />
+            {operation.errorMessage !== null ? (
+              <p className="folder-navigation__step-error">{operation.errorMessage}</p>
+            ) : null}
+            <div className="folder-navigation__workspace-popover-actions">
+              <button
+                type="button"
+                className="folder-navigation__action"
+                onClick={() => { void handleAdd(); }}
+                disabled={
+                  switchBlockedReason !== null ||
+                  operation.status === "pending" ||
+                  addName.trim() === "" ||
+                  addPath.trim() === ""
+                }
+              >
+                {operation.status === "pending" ? "Adding..." : "Add"}
+              </button>
+              <button
+                type="button"
+                className="folder-navigation__secondary-action"
+                onClick={resetToList}
+                disabled={operation.status === "pending"}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {view === "settings" ? (
+        <div className="folder-navigation__workspace-popover-section">
+          <p className="folder-navigation__group-heading">Workspace settings</p>
+          <div className="folder-navigation__operation">
+            <label className="folder-navigation__label" htmlFor="rename-workspace-name">
+              Name
+            </label>
+            <input
+              id="rename-workspace-name"
+              className="folder-navigation__input"
+              value={renameName}
+              onChange={(event) => setRenameName(event.target.value)}
+              disabled={operation.status === "pending"}
+            />
+            {operation.errorMessage !== null ? (
+              <p className="folder-navigation__step-error">{operation.errorMessage}</p>
+            ) : null}
+            <div className="folder-navigation__workspace-popover-actions">
+              <button
+                type="button"
+                className="folder-navigation__action"
+                onClick={() => { void handleRename(); }}
+                disabled={
+                  operation.status === "pending" ||
+                  renameName.trim() === "" ||
+                  renameName.trim() === activeWorkspaceName
+                }
+              >
+                {operation.status === "pending" ? "Renaming..." : "Rename"}
+              </button>
+              <button
+                type="button"
+                className="folder-navigation__secondary-action"
+                onClick={resetToList}
+                disabled={operation.status === "pending"}
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="folder-navigation__operation">
+              <button
+                type="button"
+                className="folder-navigation__secondary-action"
+                onClick={() => { void handleRemove(); }}
+                disabled={switchBlockedReason !== null || operation.status === "pending"}
+              >
+                Remove from Grove
+              </button>
+              <p className="folder-navigation__muted">
+                Removes this workspace from Grove without deleting your Markdown files.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -595,6 +945,13 @@ export function NavigationPane({
   onCreateTitleChange,
   onCreateNote,
   onSelectNote,
+  activeWorkspaceName,
+  recentWorkspaces,
+  switchBlockedReason,
+  onSwitchWorkspace,
+  onAddWorkspace,
+  onRenameWorkspace,
+  onRemoveWorkspace,
 }: NavigationPaneProps) {
   return (
     <div className="folder-navigation__navigation">
@@ -605,6 +962,13 @@ export function NavigationPane({
         expandedFolderPaths={expandedFolderPaths}
         onSelect={onSelect}
         onToggle={onToggle}
+        activeWorkspaceName={activeWorkspaceName}
+        recentWorkspaces={recentWorkspaces}
+        switchBlockedReason={switchBlockedReason}
+        onSwitchWorkspace={onSwitchWorkspace}
+        onAddWorkspace={onAddWorkspace}
+        onRenameWorkspace={onRenameWorkspace}
+        onRemoveWorkspace={onRemoveWorkspace}
       />
       <NoteList
         selectedFolderPath={selectedFolderPath}
@@ -1233,6 +1597,10 @@ export function FolderNavigationWorkspaceContent({
   isDevelopmentMode,
   initialPathChangeQueueVisibility = false,
 }: FolderNavigationWorkspaceContentProps) {
+  const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
+  const allWorkspaces = useWorkspaceStore((state) => state.allWorkspaces);
+  const workspaceLoadState = useWorkspaceStore((state) => state.loadState);
+
   const [isPathChangeQueueVisible, setIsPathChangeQueueVisible] = useState(
     initialPathChangeQueueVisibility,
   );
@@ -1262,6 +1630,7 @@ export function FolderNavigationWorkspaceContent({
     queuePathChangeOperation,
     retryPathChangeStep,
     clearCompletedPathChanges,
+    resetPathChangeQueue,
     runNextPathChangeStep,
   } = usePathChangeQueue(desktopPathChangeExecutor);
   const { notes, explicitFolders, selectedFolderPath, expandedFolderPaths } = workspaceState;
@@ -1308,6 +1677,31 @@ export function FolderNavigationWorkspaceContent({
     selectedNote === undefined || !isNoteAffectedByPathChange(pathChangeOperations, selectedNote.id)
       ? null
       : "Delete is unavailable while this note has unfinished path changes.";
+  const switchBlockedReason = getWorkspaceSwitchBlockedReason(
+    noteEditBuffer,
+    pathChangeOperations,
+  );
+  const recentWorkspaces = getRecentWorkspaces(allWorkspaces, activeWorkspace?.id);
+
+  async function handleSwitchWorkspace(id: string): Promise<void> {
+    await useWorkspaceStore.getState().switchTo(id);
+  }
+
+  async function handleAddWorkspace(name: string, rootPath: string): Promise<void> {
+    await useWorkspaceStore.getState().addNew(name, rootPath);
+  }
+
+  async function handleRenameWorkspace(name: string): Promise<void> {
+    const id = useWorkspaceStore.getState().activeWorkspace?.id;
+    if (id === undefined) return;
+    await useWorkspaceStore.getState().renameCurrent(id, name);
+  }
+
+  async function handleRemoveWorkspace(): Promise<void> {
+    const id = useWorkspaceStore.getState().activeWorkspace?.id;
+    if (id === undefined) return;
+    await useWorkspaceStore.getState().removeCurrent(id);
+  }
 
   useEffect(() => {
     selectedNoteIdRef.current = selectedNoteId;
@@ -1654,6 +2048,31 @@ export function FolderNavigationWorkspaceContent({
   }
 
   useEffect(() => {
+    void useWorkspaceStore.getState().loadWorkspaces();
+  }, []);
+
+  useEffect(() => {
+    if (activeWorkspace === null) {
+      setWorkspaceState(initialWorkspaceState);
+      setSelectedNoteId("");
+      setNoteEditBuffer(null);
+      setEditorNotice(null);
+      resetPathChangeQueue();
+      setCreateState({ status: "idle", errorMessage: null });
+      setDeleteState({ status: "idle", errorMessage: null });
+      setScanState(getScanStateWithoutActiveWorkspace(workspaceLoadState));
+      return;
+    }
+
+    setWorkspaceState(initialWorkspaceState);
+    setSelectedNoteId("");
+    setNoteEditBuffer(null);
+    setEditorNotice(null);
+    resetPathChangeQueue();
+    setScanState({ status: "loading", errorMessage: null });
+    setCreateState({ status: "idle", errorMessage: null });
+    setDeleteState({ status: "idle", errorMessage: null });
+
     let canceled = false;
 
     async function scanWorkspace(): Promise<void> {
@@ -1701,7 +2120,7 @@ export function FolderNavigationWorkspaceContent({
     return () => {
       canceled = true;
     };
-  }, []);
+  }, [activeWorkspace, activeWorkspace?.id, resetPathChangeQueue, workspaceLoadState]);
 
   useEffect(() => {
     if (selectedNote === undefined) {
@@ -1823,6 +2242,13 @@ export function FolderNavigationWorkspaceContent({
           void createNoteInSelectedFolder();
         }}
         onSelectNote={selectNote}
+        activeWorkspaceName={getActiveWorkspaceName(activeWorkspace, workspaceLoadState)}
+        recentWorkspaces={recentWorkspaces}
+        switchBlockedReason={switchBlockedReason}
+        onSwitchWorkspace={handleSwitchWorkspace}
+        onAddWorkspace={handleAddWorkspace}
+        onRenameWorkspace={handleRenameWorkspace}
+        onRemoveWorkspace={handleRemoveWorkspace}
       />
       <ActivePane
         notes={notes}
