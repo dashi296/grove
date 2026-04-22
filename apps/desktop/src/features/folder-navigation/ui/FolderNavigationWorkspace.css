@@ -1,4 +1,7 @@
 .folder-navigation {
+  --color-action-text: #ffffff;
+  --color-surface: #ffffff;
+
   background: #f7f8f5;
   color: #17211b;
   display: grid;
@@ -16,7 +19,7 @@
 }
 
 .folder-navigation__setup {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #dce4dd;
   border-radius: 8px;
   display: grid;
@@ -41,7 +44,7 @@
 
 .folder-navigation__library-column,
 .folder-navigation__notes-column {
-  background: #ffffff;
+  background: var(--color-surface);
   border-right: 1px solid #dce4dd;
   box-sizing: border-box;
 }
@@ -138,7 +141,7 @@
 }
 
 .folder-navigation__root-button {
-  background: #ffffff;
+  background: var(--color-surface);
   border-color: #dce4dd;
   min-height: 2.5rem;
   padding: 0 0.75rem;
@@ -217,7 +220,7 @@
 .folder-navigation__empty,
 .folder-navigation__editor,
 .folder-navigation__operation-item {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #dce4dd;
   border-radius: 8px;
 }
@@ -504,7 +507,7 @@
   background: #1f7a5c;
   border: 0;
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--color-action-text);
   cursor: pointer;
   min-height: 2.25rem;
   padding: 0 0.875rem;
@@ -519,7 +522,7 @@
 }
 
 .folder-navigation__secondary-action {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #c8d3ca;
   border-radius: 8px;
   color: #17211b;
@@ -567,7 +570,7 @@
 }
 
 .folder-navigation__workspace-popover {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #c8d3ca;
   border-radius: 8px;
   bottom: calc(100% + 0.5rem);
@@ -601,7 +604,7 @@
 }
 
 .folder-navigation__workspace-action {
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid transparent;
   border-radius: 8px;
   color: #17211b;

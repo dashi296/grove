@@ -292,7 +292,7 @@ function WorkspaceSwitcherPopover({
     setRenameName(activeWorkspaceName);
   }
 
-  async function handleSwitch(id: string): Promise<void> {
+  async function handleSwitch(workspaceId: string): Promise<void> {
     if (switchBlockedReason !== null) {
       setOperation({ status: "failed", errorMessage: switchBlockedReason });
       return;
@@ -300,7 +300,7 @@ function WorkspaceSwitcherPopover({
 
     setOperation({ status: "pending", errorMessage: null });
     try {
-      await onSwitchWorkspace(id);
+      await onSwitchWorkspace(workspaceId);
     } catch (error) {
       setOperation({
         status: "failed",

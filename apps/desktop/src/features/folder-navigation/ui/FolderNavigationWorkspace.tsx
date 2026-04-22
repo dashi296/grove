@@ -392,7 +392,7 @@ export function getWorkspaceViewPhase(
   activeWorkspace: DesktopWorkspace | null,
   loadState: WorkspaceLoadState,
 ): "loading" | "setup" | "ready" {
-  if (activeWorkspace === null && loadState.status !== "ready") {
+  if (activeWorkspace === null && loadState.status !== "ready" && loadState.status !== "failed") {
     return "loading";
   }
   if (activeWorkspace === null) {
