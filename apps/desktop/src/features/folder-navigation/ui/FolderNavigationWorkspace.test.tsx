@@ -341,6 +341,17 @@ describe("WorkspaceSetupRequired", () => {
     expect(markup).toContain("Create workspace");
     expect(markup).not.toContain("Create note");
   });
+
+  it("offers the native folder picker from the setup form", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSetupRequired
+        loadState={{ status: "ready", errorMessage: null }}
+        onAddWorkspace={() => Promise.resolve()}
+      />,
+    );
+
+    expect(markup).toContain("Choose folder");
+  });
 });
 
 describe("WorkspaceSetupLoading", () => {

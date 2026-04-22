@@ -27,4 +27,5 @@ export type {
   SwitchWorkspaceCommand,
   WriteMarkdownNoteCommand,
 } from "./api/commands";
+export { selectWorkspaceFolder } from "./api/dialog";
 export { ShellCard } from "./ui/ShellCard";
