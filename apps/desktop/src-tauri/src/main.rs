@@ -388,6 +388,7 @@ async fn delete_markdown_note(
 fn main() {
     if let Err(error) = tauri::Builder::default()
         .manage(WorkspaceRegistryMutationLock::default())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             add_workspace,
             create_markdown_note,

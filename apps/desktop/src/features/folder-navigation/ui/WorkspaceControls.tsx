@@ -1,8 +1,9 @@
 import { appName } from "@grove/core";
 import { useId, useState } from "react";
 
-import type { DesktopWorkspace } from "../../../shared";
+import { selectWorkspaceFolder, type DesktopWorkspace } from "../../../shared";
 import type { WorkspaceLoadState } from "../model/useWorkspaceStore";
+import { chooseWorkspaceFolder } from "../model/workspaceFolderPicker";
 
 type WorkspaceSwitcherSlice = {
   activeWorkspaceName: string;
@@ -24,6 +25,10 @@ type PopoverView = "list" | "add" | "settings";
 type PopoverOperationState = {
   status: "idle" | "pending" | "failed";
   errorMessage: string | null;
+};
+
+type FolderPickerState = {
+  status: "idle" | "choosing";
 };
 
 type WorkspaceSetupFormProps = {
@@ -134,11 +139,15 @@ function WorkspaceSetupForm({
     status: "idle",
     errorMessage: null,
   });
+  const [folderPicker, setFolderPicker] = useState<FolderPickerState>({
+    status: "idle",
+  });
   const formId = useId();
   const [name, setName] = useState("");
   const [rootPath, setRootPath] = useState("");
   const nameInputId = `${formId}-workspace-name`;
   const pathInputId = `${formId}-workspace-path`;
+  const isBusy = operation.status === "pending" || folderPicker.status === "choosing";
 
   async function handleAdd(): Promise<void> {
     if (switchBlockedReason !== null) {
@@ -155,6 +164,22 @@ function WorkspaceSetupForm({
         status: "failed",
         errorMessage: error instanceof Error ? error.message : "Failed to add workspace.",
       });
+    }
+  }
+
+  async function handleChooseFolder(): Promise<void> {
+    setFolderPicker({ status: "choosing" });
+    setOperation((currentOperation) => ({ ...currentOperation, errorMessage: null }));
+    const choice = await chooseWorkspaceFolder(selectWorkspaceFolder);
+    setFolderPicker({ status: "idle" });
+
+    if (choice.errorMessage !== null) {
+      setOperation({ status: "failed", errorMessage: choice.errorMessage });
+      return;
+    }
+
+    if (choice.path !== null) {
+      setRootPath(choice.path);
     }
   }
 
@@ -175,7 +200,7 @@ function WorkspaceSetupForm({
         value={name}
         onChange={(event) => setName(event.target.value)}
         placeholder="My Notes"
-        disabled={operation.status === "pending"}
+        disabled={isBusy}
       />
       <label className="folder-navigation__label" htmlFor={pathInputId}>
         Folder path
@@ -186,8 +211,18 @@ function WorkspaceSetupForm({
         value={rootPath}
         onChange={(event) => setRootPath(event.target.value)}
         placeholder="/Users/you/Notes"
-        disabled={operation.status === "pending"}
+        disabled={isBusy}
       />
+      <button
+        type="button"
+        className="folder-navigation__secondary-action"
+        onClick={() => {
+          void handleChooseFolder();
+        }}
+        disabled={isBusy}
+      >
+        {folderPicker.status === "choosing" ? "Choosing..." : "Choose folder"}
+      </button>
       {operation.errorMessage !== null ? (
         <p className="folder-navigation__step-error">{operation.errorMessage}</p>
       ) : null}
@@ -196,10 +231,7 @@ function WorkspaceSetupForm({
           type="submit"
           className="folder-navigation__action"
           disabled={
-            switchBlockedReason !== null ||
-            operation.status === "pending" ||
-            name.trim() === "" ||
-            rootPath.trim() === ""
+            switchBlockedReason !== null || isBusy || name.trim() === "" || rootPath.trim() === ""
           }
         >
           {operation.status === "pending" ? pendingLabel : submitLabel}
