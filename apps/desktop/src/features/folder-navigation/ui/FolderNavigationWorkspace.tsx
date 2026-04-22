@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 import type { DesktopWorkspace } from "../../../shared";
 import { getRecentWorkspaces, useWorkspaceStore } from "../model/useWorkspaceStore";
 import {
+  WorkspaceSetupLoading,
   WorkspaceSetupRequired,
   WorkspaceSwitcher,
   getActiveWorkspaceName,
@@ -79,6 +80,7 @@ import type { WorkspaceLoadState } from "../model/useWorkspaceStore";
 import "./FolderNavigationWorkspace.css";
 
 export {
+  WorkspaceSetupLoading,
   WorkspaceSetupRequired,
   WorkspaceSwitcher,
   getActiveWorkspaceName,
@@ -2016,8 +2018,12 @@ export function FolderNavigationWorkspaceContent({
 
   if (
     activeWorkspace === null &&
-    (workspaceLoadState.status === "ready" || workspaceLoadState.status === "failed")
+    (workspaceLoadState.status === "idle" || workspaceLoadState.status === "loading")
   ) {
+    return <WorkspaceSetupLoading />;
+  }
+
+  if (activeWorkspace === null) {
     return (
       <WorkspaceSetupRequired loadState={workspaceLoadState} onAddWorkspace={handleAddWorkspace} />
     );

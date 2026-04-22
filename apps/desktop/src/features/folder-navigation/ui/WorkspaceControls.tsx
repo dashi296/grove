@@ -236,6 +236,20 @@ export function WorkspaceSetupRequired({ loadState, onAddWorkspace }: WorkspaceS
   );
 }
 
+export function WorkspaceSetupLoading() {
+  return (
+    <section className="folder-navigation folder-navigation--setup">
+      <div className="folder-navigation__setup">
+        <p className="folder-navigation__eyebrow">{appName}</p>
+        <h1 className="folder-navigation__title">Loading workspace</h1>
+        <p className="folder-navigation__muted">
+          Grove is checking the local workspace registry before notes can be created.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function WorkspaceSwitcherPopover({
   id,
   activeWorkspaceName,

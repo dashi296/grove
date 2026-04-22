@@ -6,6 +6,7 @@ import {
   ActivePane,
   FolderNavigationWorkspaceContent,
   NavigationPane,
+  WorkspaceSetupLoading,
   WorkspaceSetupRequired,
   WorkspaceSwitcher,
   getActiveWorkspaceName,
@@ -25,41 +26,14 @@ describe("getFolderNavigationWorkspaceClassName", () => {
 });
 
 describe("FolderNavigationWorkspaceContent", () => {
-  it("hides the path change queue by default in development mode and shows the toggle", () => {
-    const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent isDevelopmentMode={true} />,
-    );
-
-    expect(markup).toContain("Show path change diagnostics");
-    expect(markup).not.toContain("Pending path changes");
-    expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
-  });
-
-  it("renders the path change queue when development diagnostics are expanded", () => {
-    const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent
-        isDevelopmentMode={true}
-        initialPathChangeQueueVisibility={true}
-      />,
-    );
-
-    expect(markup).toContain("Hide path change diagnostics");
-    expect(markup).toContain("Pending path changes");
-    expect(markup).toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
-  });
-
-  it("hides both the queue and the diagnostics toggle in production mode", () => {
+  it("hides note controls while workspace loading is unresolved", () => {
     const markup = renderToStaticMarkup(
       <FolderNavigationWorkspaceContent isDevelopmentMode={false} />,
     );
 
-    expect(markup).not.toContain("Show path change diagnostics");
-    expect(markup).not.toContain("Hide path change diagnostics");
-    expect(markup).not.toContain("Pending path changes");
-    expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
+    expect(markup).toContain("Loading workspace");
+    expect(markup).not.toContain("Create note");
+    expect(markup).not.toContain("folder-navigation__navigation");
   });
 });
 
@@ -365,6 +339,15 @@ describe("WorkspaceSetupRequired", () => {
   });
 });
 
+describe("WorkspaceSetupLoading", () => {
+  it("shows a loading surface without note creation controls", () => {
+    const markup = renderToStaticMarkup(<WorkspaceSetupLoading />);
+
+    expect(markup).toContain("Loading workspace");
+    expect(markup).not.toContain("Create note");
+  });
+});
+
 describe("getWorkspaceSwitchBlockedReason", () => {
   it("blocks switching when the current note has unsaved edits", () => {
     const reason = getWorkspaceSwitchBlockedReason(
@@ -625,6 +608,37 @@ describe("ActivePane", () => {
     expect(markup).not.toContain("Move selected note");
     expect(markup).not.toContain("Rename selected folder");
     expect(markup).not.toContain("Delete note");
+  });
+
+  it("hides the path change queue by default in development mode and shows the toggle", () => {
+    const markup = renderActivePaneMarkup({ isDevelopmentMode: true });
+
+    expect(markup).toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Pending path changes");
+    expect(markup).not.toContain("Path change queue");
+  });
+
+  it("renders the path change queue when development diagnostics are expanded", () => {
+    const markup = renderActivePaneMarkup({
+      isDevelopmentMode: true,
+      isPathChangeQueueVisible: true,
+    });
+
+    expect(markup).toContain("Hide path change diagnostics");
+    expect(markup).toContain("Pending path changes");
+    expect(markup).toContain("Path change queue");
+  });
+
+  it("hides both the queue and the diagnostics toggle in production mode", () => {
+    const markup = renderActivePaneMarkup({
+      isDevelopmentMode: false,
+      isPathChangeQueueVisible: true,
+    });
+
+    expect(markup).not.toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Hide path change diagnostics");
+    expect(markup).not.toContain("Pending path changes");
+    expect(markup).not.toContain("Path change queue");
   });
 
   it("shows note actions when the note disclosure starts open", () => {
