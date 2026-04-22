@@ -13,6 +13,7 @@ import {
   getFolderNavigationWorkspaceClassName,
   getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
+  getWorkspaceViewPhase,
 } from "./FolderNavigationWorkspace";
 
 describe("getFolderNavigationWorkspaceClassName", () => {
@@ -345,6 +346,30 @@ describe("WorkspaceSetupLoading", () => {
 
     expect(markup).toContain("Loading workspace");
     expect(markup).not.toContain("Create note");
+  });
+});
+
+describe("getWorkspaceViewPhase", () => {
+  const workspace = { id: "ws-a", name: "Notes", rootPath: "/notes", lastOpenedAtUnixMs: 1000 };
+
+  it("returns loading when idle with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "idle", errorMessage: null })).toBe("loading");
+  });
+
+  it("returns loading when loading with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "loading", errorMessage: null })).toBe("loading");
+  });
+
+  it("returns setup when ready with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "ready", errorMessage: null })).toBe("setup");
+  });
+
+  it("returns setup when failed with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "failed", errorMessage: "err" })).toBe("setup");
+  });
+
+  it("returns ready when workspace is active", () => {
+    expect(getWorkspaceViewPhase(workspace, { status: "ready", errorMessage: null })).toBe("ready");
   });
 });
 

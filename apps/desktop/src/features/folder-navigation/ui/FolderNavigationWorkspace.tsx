@@ -388,6 +388,19 @@ export function getScanStateWithoutActiveWorkspace(
   };
 }
 
+export function getWorkspaceViewPhase(
+  activeWorkspace: DesktopWorkspace | null,
+  loadState: WorkspaceLoadState,
+): "loading" | "setup" | "ready" {
+  if (activeWorkspace === null && (loadState.status === "idle" || loadState.status === "loading")) {
+    return "loading";
+  }
+  if (activeWorkspace === null) {
+    return "setup";
+  }
+  return "ready";
+}
+
 function getNoteReadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be read.";
 }
@@ -2016,14 +2029,13 @@ export function FolderNavigationWorkspaceContent({
     };
   }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
 
-  if (
-    activeWorkspace === null &&
-    (workspaceLoadState.status === "idle" || workspaceLoadState.status === "loading")
-  ) {
+  const workspaceViewPhase = getWorkspaceViewPhase(activeWorkspace, workspaceLoadState);
+
+  if (workspaceViewPhase === "loading") {
     return <WorkspaceSetupLoading />;
   }
 
-  if (activeWorkspace === null) {
+  if (workspaceViewPhase === "setup") {
     return (
       <WorkspaceSetupRequired loadState={workspaceLoadState} onAddWorkspace={handleAddWorkspace} />
     );
