@@ -155,7 +155,13 @@ function WorkspaceSetupForm({
   }
 
   return (
-    <div className="folder-navigation__operation">
+    <form
+      className="folder-navigation__operation"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleAdd();
+      }}
+    >
       <label className="folder-navigation__label" htmlFor={nameInputId}>
         Name
       </label>
@@ -183,11 +189,8 @@ function WorkspaceSetupForm({
       ) : null}
       <div className="folder-navigation__workspace-popover-actions">
         <button
-          type="button"
+          type="submit"
           className="folder-navigation__action"
-          onClick={() => {
-            void handleAdd();
-          }}
           disabled={
             switchBlockedReason !== null ||
             operation.status === "pending" ||
@@ -208,7 +211,7 @@ function WorkspaceSetupForm({
           </button>
         )}
       </div>
-    </div>
+    </form>
   );
 }
 

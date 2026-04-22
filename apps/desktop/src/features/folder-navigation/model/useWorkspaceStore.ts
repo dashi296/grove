@@ -30,6 +30,14 @@ function getWorkspaceErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The workspace operation failed.";
 }
 
+function makeEmptyReadyState(all: readonly DesktopWorkspace[]) {
+  return {
+    activeWorkspace: null,
+    allWorkspaces: all,
+    loadState: { status: "ready" as const, errorMessage: null },
+  };
+}
+
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   activeWorkspace: null,
   allWorkspaces: [],
@@ -41,11 +49,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
       const all = await listWorkspaces();
 
       if (all.length === 0) {
-        set({
-          activeWorkspace: null,
-          allWorkspaces: [],
-          loadState: { status: "ready", errorMessage: null },
-        });
+        set(makeEmptyReadyState(all));
         return;
       }
 
@@ -101,11 +105,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     const all = await listWorkspaces();
 
     if (all.length === 0) {
-      set({
-        activeWorkspace: null,
-        allWorkspaces: all,
-        loadState: { status: "ready", errorMessage: null },
-      });
+      set(makeEmptyReadyState(all));
       return;
     }
 

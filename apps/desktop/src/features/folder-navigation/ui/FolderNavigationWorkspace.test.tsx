@@ -3,13 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
-  ActivePane,
-  FolderNavigationWorkspaceContent,
-  NavigationPane,
   WorkspaceSetupLoading,
   WorkspaceSetupRequired,
   WorkspaceSwitcher,
   getActiveWorkspaceName,
+} from "./WorkspaceControls";
+
+import {
+  ActivePane,
+  FolderNavigationWorkspaceContent,
+  NavigationPane,
   getFolderNavigationWorkspaceClassName,
   getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
