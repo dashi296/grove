@@ -111,7 +111,8 @@ struct DesktopWorkspace {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceRegistry {
-    active_workspace_id: String,
+    #[serde(default)]
+    active_workspace_id: Option<String>,
     workspaces: Vec<DesktopWorkspace>,
 }
 
@@ -450,21 +451,8 @@ async fn load_or_create_app_workspace_registry(
     load_or_create_workspace_registry(&app_data_dir(app_handle)?).await
 }
 
-fn default_workspace_root_from_app_data_dir(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join("workspaces").join("default")
-}
-
 fn workspace_registry_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("workspace-registry.json")
-}
-
-fn default_workspace(app_data_dir: &Path, last_opened_at_unix_ms: u128) -> DesktopWorkspace {
-    DesktopWorkspace {
-        id: "default".to_string(),
-        name: "Personal Notes".to_string(),
-        root_path: default_workspace_root_from_app_data_dir(app_data_dir),
-        last_opened_at_unix_ms,
-    }
 }
 
 async fn load_or_create_workspace_registry(
@@ -482,12 +470,9 @@ async fn load_or_create_workspace_registry(
         })?
     {
         let registry = WorkspaceRegistry {
-            active_workspace_id: "default".to_string(),
-            workspaces: vec![default_workspace(app_data_dir, current_unix_ms()?)],
+            active_workspace_id: None,
+            workspaces: Vec::new(),
         };
-        tokio::fs::create_dir_all(default_workspace_root_from_app_data_dir(app_data_dir))
-            .await
-            .context("Default workspace root is unavailable.")?;
         save_workspace_registry(app_data_dir, &registry).await?;
         return Ok(registry);
     }
@@ -504,15 +489,12 @@ async fn load_or_create_workspace_registry(
         serde_json::from_str(&registry_content).context("Workspace registry is invalid.")?;
 
     if registry.workspaces.is_empty() {
-        registry.active_workspace_id = "default".to_string();
-        registry
-            .workspaces
-            .push(default_workspace(app_data_dir, current_unix_ms()?));
+        registry.active_workspace_id = None;
         save_workspace_registry(app_data_dir, &registry).await?;
     }
 
-    if find_active_workspace(&registry).is_none() {
-        registry.active_workspace_id = registry.workspaces[0].id.clone();
+    if !registry.workspaces.is_empty() && find_active_workspace(&registry).is_none() {
+        registry.active_workspace_id = Some(registry.workspaces[0].id.clone());
         save_workspace_registry(app_data_dir, &registry).await?;
     }
 
@@ -540,7 +522,7 @@ async fn add_and_activate_workspace_in_registry(
         root_path,
         last_opened_at_unix_ms: current_unix_ms()?,
     };
-    registry.active_workspace_id = workspace.id.clone();
+    registry.active_workspace_id = Some(workspace.id.clone());
     registry.workspaces.push(workspace.clone());
     save_workspace_registry(app_data_dir, &registry).await?;
 
@@ -553,7 +535,7 @@ async fn switch_active_workspace_in_registry(
 ) -> anyhow::Result<DesktopWorkspace> {
     let mut registry = load_or_create_workspace_registry(app_data_dir).await?;
     let workspace_index = find_workspace_index(&registry, workspace_id)?;
-    registry.active_workspace_id = workspace_id.to_string();
+    registry.active_workspace_id = Some(workspace_id.to_string());
     registry.workspaces[workspace_index].last_opened_at_unix_ms = current_unix_ms()?;
     let workspace = registry.workspaces[workspace_index].clone();
     tokio::fs::create_dir_all(&workspace.root_path)
@@ -594,18 +576,15 @@ async fn remove_workspace_from_registry(
         .retain(|workspace| workspace.id != workspace_id);
 
     if registry.workspaces.is_empty() {
-        registry.active_workspace_id = "default".to_string();
-        registry
-            .workspaces
-            .push(default_workspace(app_data_dir, current_unix_ms()?));
-    } else if registry.active_workspace_id == workspace_id {
+        registry.active_workspace_id = None;
+    } else if registry.active_workspace_id.as_deref() == Some(workspace_id) {
         let active_workspace_id = registry
             .workspaces
             .iter()
             .max_by_key(|workspace| workspace.last_opened_at_unix_ms)
             .map(|workspace| workspace.id.clone())
             .context("The active workspace is unavailable.")?;
-        registry.active_workspace_id = active_workspace_id;
+        registry.active_workspace_id = Some(active_workspace_id);
     }
 
     save_workspace_registry(app_data_dir, &registry).await
@@ -770,10 +749,12 @@ fn find_workspace_index(registry: &WorkspaceRegistry, workspace_id: &str) -> any
 }
 
 fn find_active_workspace(registry: &WorkspaceRegistry) -> Option<&DesktopWorkspace> {
+    let active_workspace_id = registry.active_workspace_id.as_deref()?;
+
     registry
         .workspaces
         .iter()
-        .find(|workspace| workspace.id == registry.active_workspace_id)
+        .find(|workspace| workspace.id == active_workspace_id)
 }
 
 fn active_workspace_from_registry(
@@ -1338,26 +1319,25 @@ mod tests {
     }
 
     #[test]
-    fn creates_a_default_workspace_registry_on_first_run() {
+    fn creates_an_empty_workspace_registry_on_first_run() {
         run_async(async {
-            let app_data_dir = unique_test_dir("creates-default-workspace-registry");
+            let app_data_dir = unique_test_dir("creates-empty-workspace-registry");
 
             let registry = load_or_create_workspace_registry(&app_data_dir).await?;
+            let registry_content =
+                tokio::fs::read_to_string(app_data_dir.join("workspace-registry.json")).await?;
+            let registry_json: serde_json::Value = serde_json::from_str(&registry_content)?;
 
-            assert_eq!(registry.active_workspace_id, "default");
-            assert_eq!(registry.workspaces.len(), 1);
-            assert_eq!(registry.workspaces[0].id, "default");
-            assert_eq!(registry.workspaces[0].name, "Personal Notes");
-            assert_eq!(
-                registry.workspaces[0].root_path,
-                app_data_dir.join("workspaces").join("default")
-            );
+            assert!(registry.workspaces.is_empty());
+            assert!(registry_json["activeWorkspaceId"].is_null());
             assert!(tokio::fs::try_exists(app_data_dir.join("workspace-registry.json")).await?);
-            assert!(tokio::fs::try_exists(&registry.workspaces[0].root_path).await?);
+            assert!(
+                !tokio::fs::try_exists(app_data_dir.join("workspaces").join("default")).await?
+            );
             tokio::fs::remove_dir_all(&app_data_dir).await?;
             anyhow::Ok(())
         })
-        .expect("default workspace registry should be created");
+        .expect("empty workspace registry should be created");
     }
 
     #[test]
@@ -1377,7 +1357,7 @@ mod tests {
             .await?;
             let registry = load_or_create_workspace_registry(&app_data_dir).await?;
 
-            assert_eq!(registry.active_workspace_id, added_workspace.id);
+            assert_eq!(registry.active_workspace_id, Some(added_workspace.id));
             assert!(registry
                 .workspaces
                 .iter()
@@ -1420,6 +1400,35 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("workspace metadata removal should preserve files");
+    }
+
+    #[test]
+    fn leaves_no_active_workspace_after_removing_the_last_workspace() {
+        run_async(async {
+            let app_data_dir = unique_test_dir("removes-last-workspace");
+            let workspace_root = unique_test_dir("last-workspace-root");
+            tokio::fs::create_dir_all(&workspace_root).await?;
+            load_or_create_workspace_registry(&app_data_dir).await?;
+            let added_workspace = add_and_activate_workspace_in_registry(
+                &app_data_dir,
+                "Research",
+                workspace_root.clone(),
+            )
+            .await?;
+
+            remove_workspace_from_registry(&app_data_dir, &added_workspace.id).await?;
+            let registry = load_or_create_workspace_registry(&app_data_dir).await?;
+            let registry_content =
+                tokio::fs::read_to_string(app_data_dir.join("workspace-registry.json")).await?;
+            let registry_json: serde_json::Value = serde_json::from_str(&registry_content)?;
+
+            assert!(registry.workspaces.is_empty());
+            assert!(registry_json["activeWorkspaceId"].is_null());
+            tokio::fs::remove_dir_all(&app_data_dir).await?;
+            tokio::fs::remove_dir_all(&workspace_root).await?;
+            anyhow::Ok(())
+        })
+        .expect("last workspace removal should leave no active workspace");
     }
 
     #[test]

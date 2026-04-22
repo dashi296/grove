@@ -3,14 +3,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  WorkspaceSetupLoading,
+  WorkspaceSetupRequired,
+  WorkspaceSwitcher,
+  getActiveWorkspaceName,
+} from "./WorkspaceControls";
+
+import {
   ActivePane,
   FolderNavigationWorkspaceContent,
   NavigationPane,
-  WorkspaceSwitcher,
-  getActiveWorkspaceName,
   getFolderNavigationWorkspaceClassName,
   getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
+  getWorkspaceViewPhase,
 } from "./FolderNavigationWorkspace";
 
 describe("getFolderNavigationWorkspaceClassName", () => {
@@ -24,41 +30,14 @@ describe("getFolderNavigationWorkspaceClassName", () => {
 });
 
 describe("FolderNavigationWorkspaceContent", () => {
-  it("hides the path change queue by default in development mode and shows the toggle", () => {
-    const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent isDevelopmentMode={true} />,
-    );
-
-    expect(markup).toContain("Show path change diagnostics");
-    expect(markup).not.toContain("Pending path changes");
-    expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
-  });
-
-  it("renders the path change queue when development diagnostics are expanded", () => {
-    const markup = renderToStaticMarkup(
-      <FolderNavigationWorkspaceContent
-        isDevelopmentMode={true}
-        initialPathChangeQueueVisibility={true}
-      />,
-    );
-
-    expect(markup).toContain("Hide path change diagnostics");
-    expect(markup).toContain("Pending path changes");
-    expect(markup).toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
-  });
-
-  it("hides both the queue and the diagnostics toggle in production mode", () => {
+  it("hides note controls while workspace loading is unresolved", () => {
     const markup = renderToStaticMarkup(
       <FolderNavigationWorkspaceContent isDevelopmentMode={false} />,
     );
 
-    expect(markup).not.toContain("Show path change diagnostics");
-    expect(markup).not.toContain("Hide path change diagnostics");
-    expect(markup).not.toContain("Pending path changes");
-    expect(markup).not.toContain("Path change queue");
-    expect(markup).toContain("folder-navigation__navigation");
+    expect(markup).toContain("Loading workspace");
+    expect(markup).not.toContain("Create note");
+    expect(markup).not.toContain("folder-navigation__navigation");
   });
 });
 
@@ -160,7 +139,12 @@ describe("NavigationPane", () => {
 describe("WorkspaceSwitcher", () => {
   const baseWorkspaceSwitcherProps = {
     activeWorkspaceName: "Personal Notes",
-    recentWorkspaces: [] as { id: string; name: string; rootPath: string; lastOpenedAtUnixMs: number }[],
+    recentWorkspaces: [] as {
+      id: string;
+      name: string;
+      rootPath: string;
+      lastOpenedAtUnixMs: number;
+    }[],
     switchBlockedReason: null as string | null,
     onSwitchWorkspace: () => Promise.resolve(),
     onAddWorkspace: () => Promise.resolve(),
@@ -198,13 +182,68 @@ describe("WorkspaceSwitcher", () => {
     expect(new Set(popoverIds).size).toBe(2);
   });
 
+  it("uses unique add workspace input ids when more than one add form is rendered", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} initiallyOpen={true} initialView="add" />
+        <WorkspaceSetupRequired
+          loadState={{ status: "ready", errorMessage: null }}
+          onAddWorkspace={() => Promise.resolve()}
+        />
+      </>,
+    );
+
+    const inputIds = Array.from(
+      markup.matchAll(/<(?:input)[^>]+id="([^"]+)"/g),
+      (match) => match[1],
+    );
+
+    expect(inputIds).toHaveLength(4);
+    expect(new Set(inputIds).size).toBe(4);
+  });
+
+  it("uses unique rename workspace input ids when more than one settings form is rendered", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <WorkspaceSwitcher
+          {...baseWorkspaceSwitcherProps}
+          initiallyOpen={true}
+          initialView="settings"
+        />
+        <WorkspaceSwitcher
+          {...baseWorkspaceSwitcherProps}
+          initiallyOpen={true}
+          initialView="settings"
+        />
+      </>,
+    );
+
+    const inputIds = Array.from(
+      markup.matchAll(/<(?:input)[^>]+id="([^"]+)"/g),
+      (match) => match[1],
+    );
+
+    expect(inputIds).toHaveLength(2);
+    expect(new Set(inputIds).size).toBe(2);
+  });
+
   it("opens a lightweight popover with workspace actions and no sync copy", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher
         {...baseWorkspaceSwitcherProps}
         recentWorkspaces={[
-          { id: "ws-research", name: "Research", rootPath: "/notes/research", lastOpenedAtUnixMs: 2000 },
-          { id: "ws-archive", name: "Archive", rootPath: "/notes/archive", lastOpenedAtUnixMs: 1000 },
+          {
+            id: "ws-research",
+            name: "Research",
+            rootPath: "/notes/research",
+            lastOpenedAtUnixMs: 2000,
+          },
+          {
+            id: "ws-archive",
+            name: "Archive",
+            rootPath: "/notes/archive",
+            lastOpenedAtUnixMs: 1000,
+          },
         ]}
         initiallyOpen={true}
       />,
@@ -259,7 +298,9 @@ describe("WorkspaceSwitcher", () => {
       />,
     );
 
-    expect(markup).toMatch(/<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/);
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/,
+    );
   });
 
   it("disables remove workspace while note edits are dirty", () => {
@@ -272,7 +313,9 @@ describe("WorkspaceSwitcher", () => {
       />,
     );
 
-    expect(markup).toMatch(/<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/);
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/,
+    );
   });
 
   it("renders the active workspace name from props", () => {
@@ -281,6 +324,68 @@ describe("WorkspaceSwitcher", () => {
     );
 
     expect(markup).toContain("My Research");
+  });
+});
+
+describe("WorkspaceSetupRequired", () => {
+  it("shows workspace setup before note creation controls", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSetupRequired
+        loadState={{ status: "ready", errorMessage: null }}
+        onAddWorkspace={() => Promise.resolve()}
+      />,
+    );
+
+    expect(markup).toContain("Set up a workspace");
+    expect(markup).toContain("Folder path");
+    expect(markup).toContain("Create workspace");
+    expect(markup).not.toContain("Create note");
+  });
+});
+
+describe("WorkspaceSetupLoading", () => {
+  it("shows a loading surface without note creation controls", () => {
+    const markup = renderToStaticMarkup(<WorkspaceSetupLoading />);
+
+    expect(markup).toContain("Loading workspace");
+    expect(markup).not.toContain("Create note");
+  });
+
+  it("shows the error message when the workspace load failed", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSetupLoading
+        loadState={{ status: "failed", errorMessage: "Registry corrupted" }}
+      />,
+    );
+
+    expect(markup).toContain("Workspace unavailable");
+    expect(markup).toContain("Registry corrupted");
+    expect(markup).not.toContain("Create workspace");
+    expect(markup).not.toContain("Create note");
+  });
+});
+
+describe("getWorkspaceViewPhase", () => {
+  const workspace = { id: "ws-a", name: "Notes", rootPath: "/notes", lastOpenedAtUnixMs: 1000 };
+
+  it("returns loading when idle with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "idle", errorMessage: null })).toBe("loading");
+  });
+
+  it("returns loading when loading with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "loading", errorMessage: null })).toBe("loading");
+  });
+
+  it("returns setup when ready with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "ready", errorMessage: null })).toBe("setup");
+  });
+
+  it("returns loading when failed with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "failed", errorMessage: "err" })).toBe("loading");
+  });
+
+  it("returns ready when workspace is active", () => {
+    expect(getWorkspaceViewPhase(workspace, { status: "ready", errorMessage: null })).toBe("ready");
   });
 });
 
@@ -544,6 +649,37 @@ describe("ActivePane", () => {
     expect(markup).not.toContain("Move selected note");
     expect(markup).not.toContain("Rename selected folder");
     expect(markup).not.toContain("Delete note");
+  });
+
+  it("hides the path change queue by default in development mode and shows the toggle", () => {
+    const markup = renderActivePaneMarkup({ isDevelopmentMode: true });
+
+    expect(markup).toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Pending path changes");
+    expect(markup).not.toContain("Path change queue");
+  });
+
+  it("renders the path change queue when development diagnostics are expanded", () => {
+    const markup = renderActivePaneMarkup({
+      isDevelopmentMode: true,
+      isPathChangeQueueVisible: true,
+    });
+
+    expect(markup).toContain("Hide path change diagnostics");
+    expect(markup).toContain("Pending path changes");
+    expect(markup).toContain("Path change queue");
+  });
+
+  it("hides both the queue and the diagnostics toggle in production mode", () => {
+    const markup = renderActivePaneMarkup({
+      isDevelopmentMode: false,
+      isPathChangeQueueVisible: true,
+    });
+
+    expect(markup).not.toContain("Show path change diagnostics");
+    expect(markup).not.toContain("Hide path change diagnostics");
+    expect(markup).not.toContain("Pending path changes");
+    expect(markup).not.toContain("Path change queue");
   });
 
   it("shows note actions when the note disclosure starts open", () => {
