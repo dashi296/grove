@@ -25,6 +25,19 @@ describe("mapScannedMarkdownNotes", () => {
     ]);
   });
 
+  it("derives tags from the scanned Markdown content", () => {
+    const [result] = mapScannedMarkdownNotes([
+      {
+        path: "Inbox.md",
+        title: "Inbox",
+        content: "Review this #project and #work/meetings task.",
+        updatedAtUnixMs: Date.UTC(2026, 3, 15),
+      },
+    ]);
+
+    expect(result?.tags).toStrictEqual(["project", "work/meetings"]);
+  });
+
   it("falls back to the file name when the scanned title is blank", () => {
     expect(
       mapScannedMarkdownNotes([
