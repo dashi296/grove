@@ -21,7 +21,6 @@ import {
   WorkspaceSwitcher,
   getActiveWorkspaceName,
 } from "./WorkspaceControls";
-import type { WorkspaceLoadState } from "./WorkspaceControls";
 
 import {
   createMarkdownNote,
@@ -76,6 +75,7 @@ import type {
   FolderWorkspaceState,
 } from "../model/folderWorkspaceState";
 import type { NoteEditBuffer } from "../model/noteEditBuffer";
+import type { WorkspaceLoadState } from "../model/useWorkspaceStore";
 import "./FolderNavigationWorkspace.css";
 
 export {

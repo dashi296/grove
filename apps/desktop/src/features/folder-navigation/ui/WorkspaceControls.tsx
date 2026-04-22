@@ -2,11 +2,7 @@ import { appName } from "@grove/core";
 import { useId, useState } from "react";
 
 import type { DesktopWorkspace } from "../../../shared";
-
-export type WorkspaceLoadState = {
-  status: "idle" | "loading" | "ready" | "failed";
-  errorMessage: string | null;
-};
+import type { WorkspaceLoadState } from "../model/useWorkspaceStore";
 
 type WorkspaceSwitcherSlice = {
   activeWorkspaceName: string;

@@ -10,7 +10,7 @@ import {
 } from "../../../shared";
 import type { DesktopWorkspace } from "../../../shared";
 
-type WorkspaceLoadState = {
+export type WorkspaceLoadState = {
   status: "idle" | "loading" | "ready" | "failed";
   errorMessage: string | null;
 };
