@@ -7,6 +7,23 @@
   overflow-x: auto;
 }
 
+.folder-navigation--setup {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(18rem, 32rem);
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.folder-navigation__setup {
+  background: #ffffff;
+  border: 1px solid #dce4dd;
+  border-radius: 8px;
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
 .folder-navigation__navigation {
   display: contents;
 }

@@ -38,8 +38,23 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   loadWorkspaces: async () => {
     set({ loadState: { status: "loading", errorMessage: null } });
     try {
-      const [active, all] = await Promise.all([getActiveWorkspace(), listWorkspaces()]);
-      set({ activeWorkspace: active, allWorkspaces: all, loadState: { status: "ready", errorMessage: null } });
+      const all = await listWorkspaces();
+
+      if (all.length === 0) {
+        set({
+          activeWorkspace: null,
+          allWorkspaces: [],
+          loadState: { status: "ready", errorMessage: null },
+        });
+        return;
+      }
+
+      const active = await getActiveWorkspace();
+      set({
+        activeWorkspace: active,
+        allWorkspaces: all,
+        loadState: { status: "ready", errorMessage: null },
+      });
     } catch (error) {
       set({
         activeWorkspace: null,

@@ -68,7 +68,7 @@ describe("loadWorkspaces", () => {
 
   it("sets failed state when the command throws", async () => {
     getActiveWorkspaceMock.mockRejectedValue(new Error("No workspace found"));
-    listWorkspacesMock.mockResolvedValue([]);
+    listWorkspacesMock.mockResolvedValue([workspaceA]);
 
     await useWorkspaceStore.getState().loadWorkspaces();
 
@@ -78,6 +78,18 @@ describe("loadWorkspaces", () => {
     expect(state.activeWorkspace).toBeNull();
   });
 
+  it("treats an empty workspace list as a ready setup-required state", async () => {
+    listWorkspacesMock.mockResolvedValue([]);
+
+    await useWorkspaceStore.getState().loadWorkspaces();
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeWorkspace).toBeNull();
+    expect(state.allWorkspaces).toEqual([]);
+    expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
+    expect(getActiveWorkspaceMock).not.toHaveBeenCalled();
+  });
+
   it("clears stale workspace data when reloading fails after a previous success", async () => {
     useWorkspaceStore.setState({
       activeWorkspace: workspaceA,
@@ -85,7 +97,7 @@ describe("loadWorkspaces", () => {
       loadState: { status: "ready", errorMessage: null },
     });
     getActiveWorkspaceMock.mockRejectedValue(new Error("No workspace found"));
-    listWorkspacesMock.mockResolvedValue([]);
+    listWorkspacesMock.mockResolvedValue([workspaceA]);
 
     await useWorkspaceStore.getState().loadWorkspaces();
 
@@ -136,7 +148,10 @@ describe("addNew", () => {
     const state = useWorkspaceStore.getState();
     expect(state.activeWorkspace).toEqual(newWorkspace);
     expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
-    expect(addWorkspaceMock).toHaveBeenCalledWith({ name: "Research", rootPath: "/Users/me/research" });
+    expect(addWorkspaceMock).toHaveBeenCalledWith({
+      name: "Research",
+      rootPath: "/Users/me/research",
+    });
   });
 });
 

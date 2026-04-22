@@ -132,6 +132,19 @@ type PopoverOperationState = {
   errorMessage: string | null;
 };
 
+type WorkspaceSetupFormProps = {
+  submitLabel: string;
+  pendingLabel: string;
+  onAddWorkspace: (name: string, rootPath: string) => Promise<void>;
+  switchBlockedReason?: string | null;
+  onCancel?: () => void;
+};
+
+type WorkspaceSetupRequiredProps = {
+  loadState: WorkspaceLoadState;
+  onAddWorkspace: (name: string, rootPath: string) => Promise<void>;
+};
+
 type WorkspaceSwitcherPopoverProps = WorkspaceSwitcherSlice & {
   id: string;
   initialView?: PopoverView;
@@ -665,6 +678,120 @@ export function WorkspaceSwitcher({
   );
 }
 
+function WorkspaceSetupForm({
+  submitLabel,
+  pendingLabel,
+  onAddWorkspace,
+  switchBlockedReason = null,
+  onCancel,
+}: WorkspaceSetupFormProps) {
+  const [operation, setOperation] = useState<PopoverOperationState>({
+    status: "idle",
+    errorMessage: null,
+  });
+  const [name, setName] = useState("");
+  const [rootPath, setRootPath] = useState("");
+
+  async function handleAdd(): Promise<void> {
+    if (switchBlockedReason !== null) {
+      setOperation({ status: "failed", errorMessage: switchBlockedReason });
+      return;
+    }
+
+    if (name.trim() === "" || rootPath.trim() === "") return;
+    setOperation({ status: "pending", errorMessage: null });
+    try {
+      await onAddWorkspace(name.trim(), rootPath.trim());
+    } catch (error) {
+      setOperation({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Failed to add workspace.",
+      });
+    }
+  }
+
+  return (
+    <div className="folder-navigation__operation">
+      <label className="folder-navigation__label" htmlFor="add-workspace-name">
+        Name
+      </label>
+      <input
+        id="add-workspace-name"
+        className="folder-navigation__input"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder="My Notes"
+        disabled={operation.status === "pending"}
+      />
+      <label className="folder-navigation__label" htmlFor="add-workspace-path">
+        Folder path
+      </label>
+      <input
+        id="add-workspace-path"
+        className="folder-navigation__input"
+        value={rootPath}
+        onChange={(event) => setRootPath(event.target.value)}
+        placeholder="/Users/you/Notes"
+        disabled={operation.status === "pending"}
+      />
+      {operation.errorMessage !== null ? (
+        <p className="folder-navigation__step-error">{operation.errorMessage}</p>
+      ) : null}
+      <div className="folder-navigation__workspace-popover-actions">
+        <button
+          type="button"
+          className="folder-navigation__action"
+          onClick={() => {
+            void handleAdd();
+          }}
+          disabled={
+            switchBlockedReason !== null ||
+            operation.status === "pending" ||
+            name.trim() === "" ||
+            rootPath.trim() === ""
+          }
+        >
+          {operation.status === "pending" ? pendingLabel : submitLabel}
+        </button>
+        {onCancel === undefined ? null : (
+          <button
+            type="button"
+            className="folder-navigation__secondary-action"
+            onClick={onCancel}
+            disabled={operation.status === "pending"}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function WorkspaceSetupRequired({ loadState, onAddWorkspace }: WorkspaceSetupRequiredProps) {
+  return (
+    <section className="folder-navigation folder-navigation--setup">
+      <div className="folder-navigation__setup">
+        <p className="folder-navigation__eyebrow">{appName}</p>
+        <h1 className="folder-navigation__title">Set up a workspace</h1>
+        <p className="folder-navigation__muted">
+          Choose the local folder where Grove will store Markdown notes before creating notes.
+        </p>
+        {loadState.status === "failed" ? (
+          <p className="folder-navigation__step-error">
+            {loadState.errorMessage ?? "The workspace operation failed."}
+          </p>
+        ) : null}
+        <WorkspaceSetupForm
+          submitLabel="Create workspace"
+          pendingLabel="Creating..."
+          onAddWorkspace={onAddWorkspace}
+        />
+      </div>
+    </section>
+  );
+}
+
 function WorkspaceSwitcherPopover({
   id,
   activeWorkspaceName,
@@ -681,8 +808,6 @@ function WorkspaceSwitcherPopover({
     status: "idle",
     errorMessage: null,
   });
-  const [addName, setAddName] = useState("");
-  const [addPath, setAddPath] = useState("");
   const [renameName, setRenameName] = useState(activeWorkspaceName);
 
   function switchView(nextView: PopoverView): void {
@@ -692,8 +817,6 @@ function WorkspaceSwitcherPopover({
 
   function resetToList(): void {
     switchView("list");
-    setAddName("");
-    setAddPath("");
     setRenameName(activeWorkspaceName);
   }
 
@@ -710,24 +833,6 @@ function WorkspaceSwitcherPopover({
       setOperation({
         status: "failed",
         errorMessage: error instanceof Error ? error.message : "Failed to switch workspace.",
-      });
-    }
-  }
-
-  async function handleAdd(): Promise<void> {
-    if (switchBlockedReason !== null) {
-      setOperation({ status: "failed", errorMessage: switchBlockedReason });
-      return;
-    }
-
-    if (addName.trim() === "" || addPath.trim() === "") return;
-    setOperation({ status: "pending", errorMessage: null });
-    try {
-      await onAddWorkspace(addName.trim(), addPath.trim());
-    } catch (error) {
-      setOperation({
-        status: "failed",
-        errorMessage: error instanceof Error ? error.message : "Failed to add workspace.",
       });
     }
   }
@@ -793,7 +898,9 @@ function WorkspaceSwitcherPopover({
                     <button
                       type="button"
                       className="folder-navigation__workspace-action"
-                      onClick={() => { void handleSwitch(workspace.id); }}
+                      onClick={() => {
+                        void handleSwitch(workspace.id);
+                      }}
                       disabled={switchBlockedReason !== null || operation.status === "pending"}
                     >
                       {workspace.name}
@@ -828,56 +935,13 @@ function WorkspaceSwitcherPopover({
       {view === "add" ? (
         <div className="folder-navigation__workspace-popover-section">
           <p className="folder-navigation__group-heading">Add workspace</p>
-          <div className="folder-navigation__operation">
-            <label className="folder-navigation__label" htmlFor="add-workspace-name">
-              Name
-            </label>
-            <input
-              id="add-workspace-name"
-              className="folder-navigation__input"
-              value={addName}
-              onChange={(event) => setAddName(event.target.value)}
-              placeholder="My Notes"
-              disabled={operation.status === "pending"}
-            />
-            <label className="folder-navigation__label" htmlFor="add-workspace-path">
-              Folder path
-            </label>
-            <input
-              id="add-workspace-path"
-              className="folder-navigation__input"
-              value={addPath}
-              onChange={(event) => setAddPath(event.target.value)}
-              placeholder="/Users/you/Notes"
-              disabled={operation.status === "pending"}
-            />
-            {operation.errorMessage !== null ? (
-              <p className="folder-navigation__step-error">{operation.errorMessage}</p>
-            ) : null}
-            <div className="folder-navigation__workspace-popover-actions">
-              <button
-                type="button"
-                className="folder-navigation__action"
-                onClick={() => { void handleAdd(); }}
-                disabled={
-                  switchBlockedReason !== null ||
-                  operation.status === "pending" ||
-                  addName.trim() === "" ||
-                  addPath.trim() === ""
-                }
-              >
-                {operation.status === "pending" ? "Adding..." : "Add"}
-              </button>
-              <button
-                type="button"
-                className="folder-navigation__secondary-action"
-                onClick={resetToList}
-                disabled={operation.status === "pending"}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          <WorkspaceSetupForm
+            submitLabel="Add"
+            pendingLabel="Adding..."
+            switchBlockedReason={switchBlockedReason}
+            onAddWorkspace={onAddWorkspace}
+            onCancel={resetToList}
+          />
         </div>
       ) : null}
 
@@ -902,7 +966,9 @@ function WorkspaceSwitcherPopover({
               <button
                 type="button"
                 className="folder-navigation__action"
-                onClick={() => { void handleRename(); }}
+                onClick={() => {
+                  void handleRename();
+                }}
                 disabled={
                   operation.status === "pending" ||
                   renameName.trim() === "" ||
@@ -924,7 +990,9 @@ function WorkspaceSwitcherPopover({
               <button
                 type="button"
                 className="folder-navigation__secondary-action"
-                onClick={() => { void handleRemove(); }}
+                onClick={() => {
+                  void handleRemove();
+                }}
                 disabled={switchBlockedReason !== null || operation.status === "pending"}
               >
                 Remove from Grove
@@ -1785,10 +1853,7 @@ export function FolderNavigationWorkspaceContent({
     selectedNote === undefined || !isNoteAffectedByPathChange(pathChangeOperations, selectedNote.id)
       ? null
       : "Delete is unavailable while this note has unfinished path changes.";
-  const switchBlockedReason = getWorkspaceSwitchBlockedReason(
-    noteEditBuffer,
-    pathChangeOperations,
-  );
+  const switchBlockedReason = getWorkspaceSwitchBlockedReason(noteEditBuffer, pathChangeOperations);
   const recentWorkspaces = getRecentWorkspaces(allWorkspaces, activeWorkspace?.id);
 
   async function handleSwitchWorkspace(id: string): Promise<void> {
@@ -2376,6 +2441,15 @@ export function FolderNavigationWorkspaceContent({
       window.removeEventListener("keydown", saveOnKeyboardShortcut);
     };
   }, [noteEditBuffer, pathChangeOperations, saveSelectedNoteDraft]);
+
+  if (
+    activeWorkspace === null &&
+    (workspaceLoadState.status === "ready" || workspaceLoadState.status === "failed")
+  ) {
+    return (
+      <WorkspaceSetupRequired loadState={workspaceLoadState} onAddWorkspace={handleAddWorkspace} />
+    );
+  }
 
   return (
     <section

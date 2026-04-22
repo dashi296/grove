@@ -6,6 +6,7 @@ import {
   ActivePane,
   FolderNavigationWorkspaceContent,
   NavigationPane,
+  WorkspaceSetupRequired,
   WorkspaceSwitcher,
   getActiveWorkspaceName,
   getFolderNavigationWorkspaceClassName,
@@ -160,7 +161,12 @@ describe("NavigationPane", () => {
 describe("WorkspaceSwitcher", () => {
   const baseWorkspaceSwitcherProps = {
     activeWorkspaceName: "Personal Notes",
-    recentWorkspaces: [] as { id: string; name: string; rootPath: string; lastOpenedAtUnixMs: number }[],
+    recentWorkspaces: [] as {
+      id: string;
+      name: string;
+      rootPath: string;
+      lastOpenedAtUnixMs: number;
+    }[],
     switchBlockedReason: null as string | null,
     onSwitchWorkspace: () => Promise.resolve(),
     onAddWorkspace: () => Promise.resolve(),
@@ -203,8 +209,18 @@ describe("WorkspaceSwitcher", () => {
       <WorkspaceSwitcher
         {...baseWorkspaceSwitcherProps}
         recentWorkspaces={[
-          { id: "ws-research", name: "Research", rootPath: "/notes/research", lastOpenedAtUnixMs: 2000 },
-          { id: "ws-archive", name: "Archive", rootPath: "/notes/archive", lastOpenedAtUnixMs: 1000 },
+          {
+            id: "ws-research",
+            name: "Research",
+            rootPath: "/notes/research",
+            lastOpenedAtUnixMs: 2000,
+          },
+          {
+            id: "ws-archive",
+            name: "Archive",
+            rootPath: "/notes/archive",
+            lastOpenedAtUnixMs: 1000,
+          },
         ]}
         initiallyOpen={true}
       />,
@@ -259,7 +275,9 @@ describe("WorkspaceSwitcher", () => {
       />,
     );
 
-    expect(markup).toMatch(/<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/);
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__workspace-action" disabled="">Add workspace<\/button>/,
+    );
   });
 
   it("disables remove workspace while note edits are dirty", () => {
@@ -272,7 +290,9 @@ describe("WorkspaceSwitcher", () => {
       />,
     );
 
-    expect(markup).toMatch(/<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/);
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__secondary-action" disabled="">Remove from Grove<\/button>/,
+    );
   });
 
   it("renders the active workspace name from props", () => {
@@ -281,6 +301,22 @@ describe("WorkspaceSwitcher", () => {
     );
 
     expect(markup).toContain("My Research");
+  });
+});
+
+describe("WorkspaceSetupRequired", () => {
+  it("shows workspace setup before note creation controls", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSetupRequired
+        loadState={{ status: "ready", errorMessage: null }}
+        onAddWorkspace={() => Promise.resolve()}
+      />,
+    );
+
+    expect(markup).toContain("Set up a workspace");
+    expect(markup).toContain("Folder path");
+    expect(markup).toContain("Create workspace");
+    expect(markup).not.toContain("Create note");
   });
 });
 
