@@ -39,6 +39,10 @@ type WorkspaceSetupRequiredProps = {
   onAddWorkspace: (name: string, rootPath: string) => Promise<void>;
 };
 
+type WorkspaceSetupLoadingProps = {
+  loadState?: WorkspaceLoadState;
+};
+
 type WorkspaceSwitcherPopoverProps = WorkspaceSwitcherSlice & {
   id: string;
   initialView?: PopoverView;
@@ -239,15 +243,21 @@ export function WorkspaceSetupRequired({ loadState, onAddWorkspace }: WorkspaceS
   );
 }
 
-export function WorkspaceSetupLoading() {
+export function WorkspaceSetupLoading({ loadState }: WorkspaceSetupLoadingProps = {}) {
   return (
     <section className="folder-navigation folder-navigation--setup">
       <div className="folder-navigation__setup">
         <p className="folder-navigation__eyebrow">{appName}</p>
         <h1 className="folder-navigation__title">Loading workspace</h1>
-        <p className="folder-navigation__muted">
-          Grove is checking the local workspace registry before notes can be created.
-        </p>
+        {loadState?.status === "failed" ? (
+          <p className="folder-navigation__step-error">
+            {loadState.errorMessage ?? "The workspace operation failed."}
+          </p>
+        ) : (
+          <p className="folder-navigation__muted">
+            Grove is checking the local workspace registry before notes can be created.
+          </p>
+        )}
       </div>
     </section>
   );

@@ -392,7 +392,7 @@ export function getWorkspaceViewPhase(
   activeWorkspace: DesktopWorkspace | null,
   loadState: WorkspaceLoadState,
 ): "loading" | "setup" | "ready" {
-  if (activeWorkspace === null && (loadState.status === "idle" || loadState.status === "loading")) {
+  if (activeWorkspace === null && loadState.status !== "ready") {
     return "loading";
   }
   if (activeWorkspace === null) {
@@ -2032,7 +2032,7 @@ export function FolderNavigationWorkspaceContent({
   const workspaceViewPhase = getWorkspaceViewPhase(activeWorkspace, workspaceLoadState);
 
   if (workspaceViewPhase === "loading") {
-    return <WorkspaceSetupLoading />;
+    return <WorkspaceSetupLoading loadState={workspaceLoadState} />;
   }
 
   if (workspaceViewPhase === "setup") {

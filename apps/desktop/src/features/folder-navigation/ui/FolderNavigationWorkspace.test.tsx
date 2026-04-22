@@ -350,6 +350,16 @@ describe("WorkspaceSetupLoading", () => {
     expect(markup).toContain("Loading workspace");
     expect(markup).not.toContain("Create note");
   });
+
+  it("shows the error message when the workspace load failed", () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceSetupLoading loadState={{ status: "failed", errorMessage: "Registry corrupted" }} />,
+    );
+
+    expect(markup).toContain("Loading workspace");
+    expect(markup).toContain("Registry corrupted");
+    expect(markup).not.toContain("Create note");
+  });
 });
 
 describe("getWorkspaceViewPhase", () => {
@@ -367,8 +377,8 @@ describe("getWorkspaceViewPhase", () => {
     expect(getWorkspaceViewPhase(null, { status: "ready", errorMessage: null })).toBe("setup");
   });
 
-  it("returns setup when failed with no active workspace", () => {
-    expect(getWorkspaceViewPhase(null, { status: "failed", errorMessage: "err" })).toBe("setup");
+  it("returns loading when failed with no active workspace", () => {
+    expect(getWorkspaceViewPhase(null, { status: "failed", errorMessage: "err" })).toBe("loading");
   });
 
   it("returns ready when workspace is active", () => {
