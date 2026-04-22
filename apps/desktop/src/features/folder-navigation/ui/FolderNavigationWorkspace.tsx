@@ -248,6 +248,10 @@ type NoteLinkListProps = {
   noteTitlesById: ReadonlyMap<string, string>;
 };
 
+type NoteTagListProps = {
+  tags: readonly string[];
+};
+
 const initialWorkspaceState: FolderWorkspaceState = {
   notes: [],
   explicitFolders: [],
@@ -1403,6 +1407,25 @@ function ActionDisclosure({ title, initiallyOpen = false, children }: ActionDisc
   );
 }
 
+function NoteTagList({ tags }: NoteTagListProps) {
+  return (
+    <section className="folder-navigation__link-section" aria-label="Tags">
+      <h3 className="folder-navigation__link-heading">Tags</h3>
+      {tags.length === 0 ? (
+        <p className="folder-navigation__muted">No tags in this note yet.</p>
+      ) : (
+        <ul className="folder-navigation__tag-list">
+          {tags.map((tag) => (
+            <li key={tag} className="folder-navigation__tag-chip">
+              #{tag}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function ActivePane({
   notes,
   folderOptions,
@@ -1479,6 +1502,7 @@ export function ActivePane({
                   <p className="folder-navigation__path-value">{selectedNote.path}</p>
                 </div>
                 <div className="folder-navigation__link-sections">
+                  <NoteTagList tags={selectedNote.tags} />
                   <NoteLinkList
                     kind="outgoing"
                     heading="Links"

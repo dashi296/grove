@@ -19,6 +19,7 @@ const workspaceState: FolderWorkspaceState = {
       path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
       title: "Plan",
       content: "# Plan",
+      tags: [],
       updatedLabel: "Apr 12",
     },
     {
@@ -26,6 +27,7 @@ const workspaceState: FolderWorkspaceState = {
       path: normalizeNoteFilePath("Projects/Grove/Research.md"),
       title: "Research",
       content: "# Research",
+      tags: [],
       updatedLabel: "Apr 11",
     },
   ],
@@ -52,6 +54,7 @@ describe("applySavedNoteMetadataToWorkspaceState", () => {
       path: "Projects/Grove/Plan.md",
       title: "Updated plan",
       content: "# Updated plan\n\n[[Research]]",
+      tags: [],
       updatedLabel: "Apr 15",
     });
   });
@@ -84,6 +87,7 @@ describe("applySavedNoteMetadataToWorkspaceState", () => {
       id: "note-plan",
       path: "Projects/Grove/Moved.md",
       title: "Updated plan",
+      tags: [],
     });
   });
 });

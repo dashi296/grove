@@ -19,6 +19,7 @@ describe("mapScannedMarkdownNotes", () => {
         path: "Projects/Grove/Plan.md",
         title: "Workspace plan",
         content: "# Workspace plan",
+        tags: [],
         updatedLabel: "Apr 15",
       },
     ]);
@@ -38,6 +39,25 @@ describe("mapScannedMarkdownNotes", () => {
       {
         id: "Inbox.md",
         title: "Inbox",
+        tags: [],
+      },
+    ]);
+  });
+
+  it("derives tags from scanned note content", () => {
+    expect(
+      mapScannedMarkdownNotes([
+        {
+          path: "Inbox.md",
+          title: "Inbox",
+          content: "Track #project and #project/grove.",
+          updatedAtUnixMs: Date.UTC(2026, 0, 2),
+        },
+      ]),
+    ).toMatchObject([
+      {
+        id: "Inbox.md",
+        tags: ["project", "project/grove"],
       },
     ]);
   });

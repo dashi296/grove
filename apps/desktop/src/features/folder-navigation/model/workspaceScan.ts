@@ -1,4 +1,4 @@
-import { compareWorkspacePaths, normalizeNoteFilePath } from "@grove/core";
+import { compareWorkspacePaths, normalizeNoteFilePath, parseTags } from "@grove/core";
 import type { ScannedMarkdownNote } from "../../../shared";
 
 import type { FolderNavigationNote } from "./folderWorkspaceState";
@@ -25,6 +25,7 @@ function mapScannedMarkdownNote(scannedNote: ScannedMarkdownNote): FolderNavigat
     path,
     title,
     content: scannedNote.content,
+    tags: parseTags(scannedNote.content),
     updatedLabel: formatUpdatedLabel(scannedNote.updatedAtUnixMs),
   };
 }

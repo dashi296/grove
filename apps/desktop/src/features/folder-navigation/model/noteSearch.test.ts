@@ -9,6 +9,7 @@ const searchableNotes = [
     title: "Workspace plan",
     path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
     content: "# Workspace plan\nShip local search for desktop notes.",
+    tags: [],
     updatedLabel: "Apr 18",
   },
   {
@@ -16,6 +17,7 @@ const searchableNotes = [
     title: "Capture ideas",
     path: normalizeNoteFilePath("Inbox/Capture.md"),
     content: "Quick thought about weekend errands.",
+    tags: [],
     updatedLabel: "Apr 17",
   },
   {
@@ -23,6 +25,7 @@ const searchableNotes = [
     title: "Archived reference",
     path: normalizeNoteFilePath("Projects/Archive/Reference.md"),
     content: "Historical context only.",
+    tags: [],
     updatedLabel: "Apr 10",
   },
 ] as const;

@@ -69,6 +69,7 @@ describe("NavigationPane", () => {
       path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
       title: "Plan",
       content: "",
+      tags: [],
       updatedLabel: "Apr 19",
     },
     {
@@ -76,6 +77,7 @@ describe("NavigationPane", () => {
       path: normalizeNoteFilePath("Personal/Journal.md"),
       title: "Journal",
       content: "",
+      tags: [],
       updatedLabel: "Apr 18",
     },
   ];
@@ -414,6 +416,7 @@ describe("ActivePane", () => {
             path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
             title: "Plan",
             content: "[[Research]] [[Missing|Untriaged]]",
+            tags: ["project", "active"],
             updatedLabel: "Apr 19",
           },
         ]}
@@ -487,6 +490,9 @@ describe("ActivePane", () => {
     expect(markup).toContain("Links");
     expect(markup).toContain("Backlinks");
     expect(markup).toContain("Path");
+    expect(markup).toContain("Tags");
+    expect(markup).toContain("#project");
+    expect(markup).toContain("#active");
     expect(markup).toContain("Research");
     expect(markup).toContain("Untriaged -&gt; Missing");
     expect(markup).toContain("Review via Project plan");

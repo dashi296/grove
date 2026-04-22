@@ -328,6 +328,24 @@
   padding: 0;
 }
 
+.folder-navigation__tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder-navigation__tag-chip {
+  background: #e8f2e2;
+  border: 1px solid #97c459;
+  border-radius: 999px;
+  color: #27500a;
+  font-size: 0.8125rem;
+  padding: 0.2rem 0.625rem;
+}
+
 .folder-navigation__link-list li {
   align-items: center;
   display: flex;
