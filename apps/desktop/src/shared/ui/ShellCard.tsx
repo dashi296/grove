@@ -7,8 +7,8 @@ export function ShellCard() {
         maxWidth: "40rem",
         padding: "2rem",
         borderRadius: "1.5rem",
-        backgroundColor: "rgba(255, 255, 255, 0.82)",
-        boxShadow: "0 20px 50px rgba(39, 80, 10, 0.1)",
+        backgroundColor: "var(--color-shell-card-bg)",
+        boxShadow: "var(--shadow-shell-card)",
       }}
     >
       <p style={{ margin: 0, letterSpacing: "0.12em", textTransform: "uppercase" }}>

@@ -1,9 +1,6 @@
 .folder-navigation {
-  --color-action-text: #ffffff;
-  --color-surface: #ffffff;
-
-  background: #f7f8f5;
-  color: #17211b;
+  background: var(--color-bg);
+  color: var(--color-text);
   display: grid;
   grid-template-columns: minmax(14rem, 18rem) minmax(18rem, 24rem) minmax(24rem, 1fr);
   min-height: 100vh;
@@ -20,7 +17,7 @@
 
 .folder-navigation__setup {
   background: var(--color-surface);
-  border: 1px solid #dce4dd;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 1rem;
@@ -45,7 +42,7 @@
 .folder-navigation__library-column,
 .folder-navigation__notes-column {
   background: var(--color-surface);
-  border-right: 1px solid #dce4dd;
+  border-right: 1px solid var(--color-border);
   box-sizing: border-box;
 }
 
@@ -67,7 +64,7 @@
 }
 
 .folder-navigation__group-heading {
-  color: #4d6959;
+  color: var(--color-heading-muted);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -82,7 +79,7 @@
 }
 
 .folder-navigation__eyebrow {
-  color: #4d6959;
+  color: var(--color-heading-muted);
   font-size: 0.875rem;
   margin: 0 0 0.5rem;
 }
@@ -119,10 +116,10 @@
 
 .folder-navigation__queue-toggle {
   align-self: start;
-  background: #eef1ec;
-  border: 1px solid #c8d3ca;
+  background: var(--color-control-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 999px;
-  color: #39483f;
+  color: var(--color-text-subtle);
   cursor: pointer;
   min-height: 2.25rem;
   padding: 0 0.875rem;
@@ -134,7 +131,7 @@
   align-items: center;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -142,7 +139,7 @@
 
 .folder-navigation__root-button {
   background: var(--color-surface);
-  border-color: #dce4dd;
+  border-color: var(--color-border);
   min-height: 2.5rem;
   padding: 0 0.75rem;
   width: 100%;
@@ -158,8 +155,8 @@
 
 .folder-navigation__root-button--selected,
 .folder-navigation__folder-button--selected {
-  background: #ddf3e7;
-  border-color: #1f7a5c;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
 }
 
 .folder-navigation__tree {
@@ -180,10 +177,10 @@
 }
 
 .folder-navigation__toggle {
-  background: #e6f0e7;
+  background: var(--color-accent-soft);
   border: 0;
   border-radius: 6px;
-  color: #25543c;
+  color: var(--color-accent-text);
   cursor: pointer;
   width: 1.75rem;
 }
@@ -195,7 +192,7 @@
 
 .folder-navigation__count,
 .folder-navigation__muted {
-  color: #5f6d64;
+  color: var(--color-text-muted);
 }
 
 .folder-navigation__notes {
@@ -221,7 +218,7 @@
 .folder-navigation__editor,
 .folder-navigation__operation-item {
   background: var(--color-surface);
-  border: 1px solid #dce4dd;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
 }
 
@@ -235,7 +232,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   display: grid;
   gap: 0.5rem;
@@ -245,7 +242,7 @@
 }
 
 .folder-navigation__note-button--selected {
-  border-color: #1f7a5c;
+  border-color: var(--color-primary);
 }
 
 .folder-navigation__note-title {
@@ -273,8 +270,8 @@
 }
 
 .folder-navigation__disclosure {
-  background: #f7f8f5;
-  border: 1px solid #dce4dd;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 0.75rem;
@@ -285,7 +282,7 @@
   align-items: center;
   background: transparent;
   border: 0;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -306,7 +303,7 @@
 }
 
 .folder-navigation__path-value {
-  color: #5f6d64;
+  color: var(--color-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.75rem;
   line-height: 1.5;
@@ -326,8 +323,8 @@
 }
 
 .folder-navigation__link-section {
-  background: #f7f8f5;
-  border: 1px solid #dce4dd;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 0.625rem;
@@ -335,7 +332,7 @@
 }
 
 .folder-navigation__link-heading {
-  color: #17211b;
+  color: var(--color-text);
   font-size: 0.875rem;
   margin: 0;
 }
@@ -356,18 +353,18 @@
 }
 
 .folder-navigation__link-status {
-  background: #ddf3e7;
-  border: 1px solid #1f7a5c;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary);
   border-radius: 999px;
-  color: #1d5a45;
+  color: var(--color-primary-muted);
   font-size: 0.75rem;
   padding: 0.125rem 0.5rem;
 }
 
 .folder-navigation__link-status--unresolved {
-  background: #fff0d7;
-  border-color: #b7791f;
-  color: #74480e;
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-text);
 }
 
 .folder-navigation__editor-toolbar {
@@ -407,55 +404,55 @@
 }
 
 .folder-navigation__status {
-  background: #eef1ec;
-  border: 1px solid #c8d3ca;
+  background: var(--color-control-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 999px;
-  color: #39483f;
+  color: var(--color-text-subtle);
   font-size: 0.75rem;
   padding: 0.125rem 0.5rem;
   text-transform: uppercase;
 }
 
 .folder-navigation__status--completed {
-  background: #ddf3e7;
-  border-color: #1f7a5c;
-  color: #1d5a45;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-muted);
 }
 
 .folder-navigation__status--failed {
-  background: #ffe8e2;
-  border-color: #c5553c;
-  color: #8f2f1b;
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-text);
 }
 
 .folder-navigation__status--clean {
-  background: #ddf3e7;
-  border-color: #1f7a5c;
-  color: #1d5a45;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-muted);
 }
 
 .folder-navigation__status--dirty,
 .folder-navigation__status--saving {
-  background: #fff0d7;
-  border-color: #b7791f;
-  color: #74480e;
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-text);
 }
 
 .folder-navigation__status--error {
-  background: #ffe8e2;
-  border-color: #c5553c;
-  color: #8f2f1b;
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-text);
 }
 
 .folder-navigation__step-error {
-  color: #8f2f1b;
+  color: var(--color-danger-text);
   font-size: 0.75rem;
   grid-column: 1 / -1;
   line-height: 1.4;
 }
 
 .folder-navigation__path-changes {
-  color: #5f6d64;
+  color: var(--color-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.75rem;
 }
@@ -473,7 +470,7 @@
 
 .folder-navigation__checkbox-row {
   align-items: center;
-  color: #39483f;
+  color: var(--color-text-subtle);
   display: flex;
   gap: 0.5rem;
   font-size: 0.875rem;
@@ -482,10 +479,10 @@
 .folder-navigation__input,
 .folder-navigation__select,
 .folder-navigation__textarea {
-  background: #f7f8f5;
-  border: 1px solid #c8d3ca;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
 }
 
 .folder-navigation__input,
@@ -504,10 +501,10 @@
 }
 
 .folder-navigation__action {
-  background: #1f7a5c;
+  background: var(--color-primary);
   border: 0;
   border-radius: 8px;
-  color: var(--color-action-text);
+  color: var(--color-primary-text);
   cursor: pointer;
   min-height: 2.25rem;
   padding: 0 0.875rem;
@@ -523,9 +520,9 @@
 
 .folder-navigation__secondary-action {
   background: var(--color-surface);
-  border: 1px solid #c8d3ca;
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   min-height: 2.25rem;
   padding: 0 0.875rem;
@@ -533,10 +530,10 @@
 }
 
 .folder-navigation__format-action {
-  background: #eef1ec;
-  border: 1px solid #c8d3ca;
+  background: var(--color-control-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   min-height: 2rem;
   padding: 0 0.625rem;
@@ -548,10 +545,10 @@
 }
 
 .folder-navigation__workspace-switcher-button {
-  background: #f7f8f5;
-  border: 1px solid #c8d3ca;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   display: grid;
   gap: 0.25rem;
@@ -565,16 +562,16 @@
 }
 
 .folder-navigation__workspace-hint {
-  color: #5f6d64;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
 }
 
 .folder-navigation__workspace-popover {
   background: var(--color-surface);
-  border: 1px solid #c8d3ca;
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   bottom: calc(100% + 0.5rem);
-  box-shadow: 0 1rem 2rem rgb(23 33 27 / 14%);
+  box-shadow: var(--shadow-popover);
   display: grid;
   gap: 0.875rem;
   left: 0;
@@ -607,7 +604,7 @@
   background: var(--color-surface);
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #17211b;
+  color: var(--color-text);
   cursor: pointer;
   min-height: 2rem;
   padding: 0 0.5rem;
@@ -616,8 +613,8 @@
 }
 
 .folder-navigation__workspace-action:hover {
-  background: #eef1ec;
-  border-color: #c8d3ca;
+  background: var(--color-control-bg);
+  border-color: var(--color-border-strong);
 }
 
 .folder-navigation__action:disabled,
@@ -637,10 +634,10 @@
 }
 
 .folder-navigation__tag {
-  background: #eef1ec;
-  border: 1px solid #c8d3ca;
+  background: var(--color-control-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 999px;
-  color: #25543c;
+  color: var(--color-accent-text);
   font-size: 0.75rem;
   padding: 0.125rem 0.5rem;
 }
@@ -653,7 +650,7 @@
   .folder-navigation__library-column,
   .folder-navigation__notes-column,
   .folder-navigation__pane {
-    border-bottom: 1px solid #dce4dd;
+    border-bottom: 1px solid var(--color-border);
     border-right: 0;
   }
 
