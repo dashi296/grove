@@ -99,6 +99,16 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   removeCurrent: async (id: string) => {
     await removeWorkspace({ id });
     const all = await listWorkspaces();
+
+    if (all.length === 0) {
+      set({
+        activeWorkspace: null,
+        allWorkspaces: all,
+        loadState: { status: "ready", errorMessage: null },
+      });
+      return;
+    }
+
     try {
       const newActive = await getActiveWorkspace();
       set({
@@ -106,11 +116,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
         allWorkspaces: all,
         loadState: { status: "ready", errorMessage: null },
       });
-    } catch {
+    } catch (error) {
       set({
         activeWorkspace: null,
         allWorkspaces: all,
-        loadState: { status: "ready", errorMessage: null },
+        loadState: { status: "failed", errorMessage: getWorkspaceErrorMessage(error) },
       });
     }
   },

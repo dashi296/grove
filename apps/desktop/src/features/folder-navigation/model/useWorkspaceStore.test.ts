@@ -214,6 +214,28 @@ describe("removeCurrent", () => {
     expect(state.allWorkspaces).toEqual([]);
     expect(state.loadState).toEqual({ status: "ready", errorMessage: null });
   });
+
+  it("sets failed state when active lookup fails after removing one of several workspaces", async () => {
+    removeWorkspaceMock.mockResolvedValue(undefined);
+    listWorkspacesMock.mockResolvedValue([workspaceB]);
+    getActiveWorkspaceMock.mockRejectedValue(new Error("Active workspace is unavailable"));
+
+    useWorkspaceStore.setState({
+      activeWorkspace: workspaceA,
+      allWorkspaces: [workspaceA, workspaceB],
+      loadState: { status: "ready", errorMessage: null },
+    });
+
+    await useWorkspaceStore.getState().removeCurrent("ws-a");
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeWorkspace).toBeNull();
+    expect(state.allWorkspaces).toEqual([workspaceB]);
+    expect(state.loadState).toEqual({
+      status: "failed",
+      errorMessage: "Active workspace is unavailable",
+    });
+  });
 });
 
 describe("getRecentWorkspaces", () => {

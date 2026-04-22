@@ -257,6 +257,7 @@ function WorkspaceSwitcherPopover({
     errorMessage: null,
   });
   const [renameName, setRenameName] = useState(activeWorkspaceName);
+  const renameInputId = `${id}-rename-workspace-name`;
 
   function switchView(nextView: PopoverView): void {
     setView(nextView);
@@ -397,11 +398,11 @@ function WorkspaceSwitcherPopover({
         <div className="folder-navigation__workspace-popover-section">
           <p className="folder-navigation__group-heading">Workspace settings</p>
           <div className="folder-navigation__operation">
-            <label className="folder-navigation__label" htmlFor="rename-workspace-name">
+            <label className="folder-navigation__label" htmlFor={renameInputId}>
               Name
             </label>
             <input
-              id="rename-workspace-name"
+              id={renameInputId}
               className="folder-navigation__input"
               value={renameName}
               onChange={(event) => setRenameName(event.target.value)}
