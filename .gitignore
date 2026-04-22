@@ -4,6 +4,7 @@ dist
 coverage
 .turbo
 .superpowers/
+.worktrees/
 apps/mobile/.expo
 apps/mobile/.expo-shared
 apps/mobile/android/.gradle
