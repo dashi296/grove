@@ -244,12 +244,16 @@ export function WorkspaceSetupRequired({ loadState, onAddWorkspace }: WorkspaceS
 }
 
 export function WorkspaceSetupLoading({ loadState }: WorkspaceSetupLoadingProps = {}) {
+  const isFailed = loadState?.status === "failed";
+
   return (
     <section className="folder-navigation folder-navigation--setup">
       <div className="folder-navigation__setup">
         <p className="folder-navigation__eyebrow">{appName}</p>
-        <h1 className="folder-navigation__title">Loading workspace</h1>
-        {loadState?.status === "failed" ? (
+        <h1 className="folder-navigation__title">
+          {isFailed ? "Workspace unavailable" : "Loading workspace"}
+        </h1>
+        {isFailed ? (
           <p className="folder-navigation__step-error">
             {loadState.errorMessage ?? "The workspace operation failed."}
           </p>
