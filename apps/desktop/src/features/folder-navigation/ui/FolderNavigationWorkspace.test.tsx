@@ -204,6 +204,26 @@ describe("WorkspaceSwitcher", () => {
     expect(new Set(popoverIds).size).toBe(2);
   });
 
+  it("uses unique add workspace input ids when more than one add form is rendered", () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <WorkspaceSwitcher {...baseWorkspaceSwitcherProps} initiallyOpen={true} initialView="add" />
+        <WorkspaceSetupRequired
+          loadState={{ status: "ready", errorMessage: null }}
+          onAddWorkspace={() => Promise.resolve()}
+        />
+      </>,
+    );
+
+    const inputIds = Array.from(
+      markup.matchAll(/<(?:input)[^>]+id="([^"]+)"/g),
+      (match) => match[1],
+    );
+
+    expect(inputIds).toHaveLength(4);
+    expect(new Set(inputIds).size).toBe(4);
+  });
+
   it("opens a lightweight popover with workspace actions and no sync copy", () => {
     const markup = renderToStaticMarkup(
       <WorkspaceSwitcher

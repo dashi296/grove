@@ -689,8 +689,11 @@ function WorkspaceSetupForm({
     status: "idle",
     errorMessage: null,
   });
+  const formId = useId();
   const [name, setName] = useState("");
   const [rootPath, setRootPath] = useState("");
+  const nameInputId = `${formId}-workspace-name`;
+  const pathInputId = `${formId}-workspace-path`;
 
   async function handleAdd(): Promise<void> {
     if (switchBlockedReason !== null) {
@@ -712,22 +715,22 @@ function WorkspaceSetupForm({
 
   return (
     <div className="folder-navigation__operation">
-      <label className="folder-navigation__label" htmlFor="add-workspace-name">
+      <label className="folder-navigation__label" htmlFor={nameInputId}>
         Name
       </label>
       <input
-        id="add-workspace-name"
+        id={nameInputId}
         className="folder-navigation__input"
         value={name}
         onChange={(event) => setName(event.target.value)}
         placeholder="My Notes"
         disabled={operation.status === "pending"}
       />
-      <label className="folder-navigation__label" htmlFor="add-workspace-path">
+      <label className="folder-navigation__label" htmlFor={pathInputId}>
         Folder path
       </label>
       <input
-        id="add-workspace-path"
+        id={pathInputId}
         className="folder-navigation__input"
         value={rootPath}
         onChange={(event) => setRootPath(event.target.value)}
