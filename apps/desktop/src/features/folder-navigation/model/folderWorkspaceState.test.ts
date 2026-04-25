@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeFolderPath, normalizeNoteFilePath } from "@grove/core";
 import type { FolderWorkspaceState } from "./folderWorkspaceState";
 import {
+  addExplicitFolderToWorkspace,
   clearCompletedPathChangeOperations,
   completeNextOperationStep,
   createPathChangeOperation,
@@ -115,6 +116,38 @@ describe("moveNoteInFolderWorkspace", () => {
         normalizeFolderPath("Reading"),
       ),
     ).toThrow("target Markdown path");
+  });
+});
+
+describe("addExplicitFolderToWorkspace", () => {
+  it("adds a new empty folder, expands its ancestors, and selects it", () => {
+    const result = addExplicitFolderToWorkspace(
+      workspaceState,
+      normalizeFolderPath("Projects/Grove/Ideas/Inbox"),
+    );
+
+    expect(result.explicitFolders).toStrictEqual([
+      "Projects/Grove/Ideas",
+      "Projects/Grove/Ideas/Inbox",
+      "Reading",
+    ]);
+    expect(result.expandedFolderPaths).toStrictEqual([
+      "Projects",
+      "Projects/Grove",
+      "Projects/Grove/Ideas",
+      "Projects/Grove/Research",
+    ]);
+    expect(result.selectedFolderPath).toBe("Projects/Grove/Ideas/Inbox");
+  });
+
+  it("does not duplicate an existing explicit folder", () => {
+    const result = addExplicitFolderToWorkspace(
+      workspaceState,
+      normalizeFolderPath("Reading"),
+    );
+
+    expect(result.explicitFolders).toStrictEqual(workspaceState.explicitFolders);
+    expect(result.selectedFolderPath).toBe("Reading");
   });
 });
 

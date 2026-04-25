@@ -13,7 +13,9 @@ import {
   ActivePane,
   FolderNavigationWorkspaceContent,
   NavigationPane,
+  canRenameSelectedFolder,
   getFolderNavigationWorkspaceClassName,
+  getInitialNoteContent,
   getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
   getWorkspaceViewPhase,
@@ -38,6 +40,31 @@ describe("FolderNavigationWorkspaceContent", () => {
     expect(markup).toContain("Loading workspace");
     expect(markup).not.toContain("Create note");
     expect(markup).not.toContain("folder-navigation__navigation");
+  });
+});
+
+describe("getInitialNoteContent", () => {
+  it("creates new notes with an empty body", () => {
+    expect(getInitialNoteContent()).toBe("");
+  });
+});
+
+describe("canRenameSelectedFolder", () => {
+  it("requires at least one Markdown note in the selected folder scope", () => {
+    expect(
+      canRenameSelectedFolder(
+        [
+          {
+            id: "note-plan",
+            path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+            title: "Plan",
+            tags: [],
+            updatedLabel: "Apr 19",
+          },
+        ],
+        normalizeFolderPath("Projects/Grove/Ideas"),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -80,11 +107,9 @@ describe("NavigationPane", () => {
         selectedNoteId="note-plan"
         scanState={{ status: "ready", errorMessage: null }}
         createState={{ status: "idle", errorMessage: null }}
-        createTitle=""
         searchQuery=""
         searchIndexState={{ status: "ready" }}
         restrictSearchToSelectedFolder={false}
-        onCreateTitleChange={() => {}}
         onSearchQueryChange={() => {}}
         onRestrictSearchToSelectedFolderChange={() => {}}
         onCreateNote={() => {}}
@@ -117,6 +142,13 @@ describe("NavigationPane", () => {
     expect(markup).toContain("Grove");
     expect(markup).toContain("Plan");
     expect(markup).not.toContain("Journal");
+  });
+
+  it("creates notes without showing a separate title input", () => {
+    const markup = renderNavigationPaneMarkup();
+
+    expect(markup).toContain("Create note");
+    expect(markup).not.toContain("create-note-title");
   });
 
   it("places the workspace switcher in the Library column", () => {
@@ -546,6 +578,7 @@ describe("ActivePane", () => {
         onMoveSelectedNote={() => {
           throw new Error("not implemented in test");
         }}
+        onCreateFolder={() => Promise.resolve()}
         onRenameSelectedFolder={() => {
           throw new Error("not implemented in test");
         }}
@@ -706,9 +739,29 @@ describe("ActivePane", () => {
   it("shows folder actions when the folder disclosure starts open", () => {
     const markup = renderActivePaneMarkup({ initialFolderActionsOpen: true });
 
+    expect(markup).toContain("Create folder");
     expect(markup).toContain("Rename selected folder");
     expect(markup).toContain(
       "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
+    );
+  });
+
+  it("disables folder rename when the selected folder has no Markdown notes", () => {
+    const markup = renderActivePaneMarkup({
+      notes: [],
+      folderOptions: [],
+      selectedFolderPath: normalizeFolderPath("Projects/Grove/Ideas"),
+      selectedNoteId: "",
+      selectedNoteLinks: [],
+      selectedNoteBacklinks: [],
+      noteTitlesById: new Map(),
+      initialFolderActionsOpen: true,
+    });
+
+    expect(markup).toContain("Rename selected folder");
+    expect(markup).toContain("Only folders with Markdown notes can be renamed right now.");
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__action" disabled="">Rename folder<\/button>/,
     );
   });
 

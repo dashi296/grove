@@ -30,6 +30,10 @@ export type CreateMarkdownNoteCommand = {
   content: string;
 };
 
+export type CreateMarkdownFolderCommand = {
+  path: string;
+};
+
 export type ReadMarkdownNoteCommand = {
   path: string;
 };
@@ -133,6 +137,16 @@ export async function scanMarkdownWorkspace(): Promise<ScannedMarkdownNote[]> {
   return result;
 }
 
+export async function listMarkdownFolders(): Promise<string[]> {
+  const result = await invokeCommandResult("scan_markdown_folders", {});
+
+  if (!isMarkdownFolderPaths(result)) {
+    throw new Error("The desktop scan command returned an invalid folder list.");
+  }
+
+  return result;
+}
+
 export async function createMarkdownNote(
   command: CreateMarkdownNoteCommand,
 ): Promise<ScannedMarkdownNote> {
@@ -143,6 +157,10 @@ export async function createMarkdownNote(
   }
 
   return result;
+}
+
+export async function createMarkdownFolder(command: CreateMarkdownFolderCommand): Promise<void> {
+  await invokeCommand("create_markdown_folder", { folder: command });
 }
 
 export async function readMarkdownNote(command: ReadMarkdownNoteCommand): Promise<string> {
@@ -213,6 +231,10 @@ function isCommandErrorPayload(error: unknown): error is { message: string } {
 
 function isScannedMarkdownNotes(value: unknown): value is ScannedMarkdownNote[] {
   return Array.isArray(value) && value.every(isScannedMarkdownNote);
+}
+
+function isMarkdownFolderPaths(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 function isDesktopWorkspaces(value: unknown): value is DesktopWorkspace[] {

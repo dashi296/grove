@@ -366,6 +366,21 @@ export function reconcileFolderWorkspaceState(state: FolderWorkspaceState): Fold
   };
 }
 
+export function addExplicitFolderToWorkspace(
+  state: FolderWorkspaceState,
+  folderPath: FolderPath,
+): FolderWorkspaceState {
+  return reconcileFolderWorkspaceState({
+    ...state,
+    explicitFolders: dedupeAndSortFolderPaths([...state.explicitFolders, folderPath]),
+    expandedFolderPaths: dedupeExpandedFolderPaths([
+      ...state.expandedFolderPaths,
+      ...getFolderPathAncestors(folderPath),
+    ]),
+    selectedFolderPath: folderPath,
+  });
+}
+
 export function moveNoteInFolderWorkspace(
   state: FolderWorkspaceState,
   noteId: string,

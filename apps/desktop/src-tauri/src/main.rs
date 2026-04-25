@@ -41,6 +41,12 @@ struct CreateMarkdownNoteRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CreateMarkdownFolderRequest {
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WriteMarkdownNoteRequest {
     path: String,
     content: String,
@@ -306,6 +312,26 @@ async fn scan_markdown_workspace(
 }
 
 #[tauri::command]
+async fn scan_markdown_folders(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+) -> Result<Vec<String>, CommandError> {
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
+
+    tokio::fs::create_dir_all(&workspace_root)
+        .await
+        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))?;
+
+    scan_workspace_folders(&workspace_root)
+        .await
+        .map_err(|error| CommandError::new("workspace_scan_failed", error.to_string()))
+}
+
+#[tauri::command]
 async fn read_markdown_note(
     app_handle: tauri::AppHandle,
     lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
@@ -343,6 +369,24 @@ async fn create_markdown_note(
     summarize_markdown_file(&workspace_root, &note_path)
         .await
         .map_err(|error| CommandError::new("note_create_failed", error.to_string()))
+}
+
+#[tauri::command]
+async fn create_markdown_folder(
+    app_handle: tauri::AppHandle,
+    lock: tauri::State<'_, WorkspaceRegistryMutationLock>,
+    folder: CreateMarkdownFolderRequest,
+) -> Result<(), CommandError> {
+    let workspace_root = run_locked_workspace_registry_mutation(lock.inner(), || async {
+        active_workspace_root(&app_handle).await
+    })
+    .await
+    .map_err(|error| CommandError::new("folder_create_failed", error.to_string()))?;
+    let folder_path = resolve_folder_path(&workspace_root, &folder.path)?;
+
+    create_workspace_folder(&folder_path)
+        .await
+        .map_err(|error| CommandError::new("folder_create_failed", error.to_string()))
 }
 
 #[tauri::command]
@@ -391,6 +435,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             add_workspace,
+            create_markdown_folder,
             create_markdown_note,
             delete_markdown_note,
             get_active_workspace,
@@ -400,6 +445,7 @@ fn main() {
             refresh_note_indexes,
             remove_workspace,
             rename_workspace,
+            scan_markdown_folders,
             scan_markdown_workspace,
             switch_workspace,
             write_markdown_note
@@ -815,6 +861,11 @@ fn resolve_markdown_path(workspace_root: &Path, path: &str) -> Result<PathBuf, C
     Ok(workspace_root.join(path))
 }
 
+fn resolve_folder_path(workspace_root: &Path, path: &str) -> Result<PathBuf, CommandError> {
+    validate_folder_path(path)?;
+    Ok(workspace_root.join(path))
+}
+
 fn validate_markdown_path(path: &str) -> Result<(), CommandError> {
     if has_windows_drive_prefix(path) {
         return Err(CommandError::new(
@@ -862,6 +913,42 @@ fn validate_markdown_path(path: &str) -> Result<(), CommandError> {
     Ok(())
 }
 
+fn validate_folder_path(path: &str) -> Result<(), CommandError> {
+    if has_windows_drive_prefix(path) {
+        return Err(CommandError::new(
+            "invalid_folder_path",
+            "Folder paths must not include a drive prefix.",
+        ));
+    }
+
+    if path.contains('\\') {
+        return Err(CommandError::new(
+            "invalid_folder_path",
+            "Folder paths must use workspace separators.",
+        ));
+    }
+
+    let folder_path = Path::new(path);
+
+    if folder_path.components().next().is_none() {
+        return Err(CommandError::new(
+            "invalid_folder_path",
+            "Folder paths cannot be empty.",
+        ));
+    }
+
+    for component in folder_path.components() {
+        if !matches!(component, Component::Normal(_)) {
+            return Err(CommandError::new(
+                "invalid_folder_path",
+                "Folder paths must stay inside the workspace.",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn has_windows_drive_prefix(path: &str) -> bool {
     let path_bytes = path.as_bytes();
 
@@ -894,6 +981,36 @@ async fn scan_markdown_files(workspace_root: &Path) -> anyhow::Result<Vec<Scanne
 
     notes.sort_by(|left, right| left.path.to_lowercase().cmp(&right.path.to_lowercase()));
     Ok(notes)
+}
+
+async fn scan_workspace_folders(workspace_root: &Path) -> anyhow::Result<Vec<String>> {
+    let mut pending_dirs = vec![workspace_root.to_path_buf()];
+    let mut folders = Vec::new();
+
+    while let Some(directory) = pending_dirs.pop() {
+        let mut entries = tokio::fs::read_dir(&directory).await?;
+
+        while let Some(entry) = entries.next_entry().await? {
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+
+            if file_name.starts_with('.') {
+                continue;
+            }
+
+            if entry.file_type().await?.is_dir() {
+                pending_dirs.push(entry.path());
+            }
+        }
+
+        if directory != workspace_root {
+            let relative_path = directory.strip_prefix(workspace_root)?;
+            folders.push(relative_path_to_workspace_path(relative_path)?);
+        }
+    }
+
+    folders.sort_by_key(|path| path.to_lowercase());
+    Ok(folders)
 }
 
 fn get_workspace_relative_markdown_path(
@@ -1008,6 +1125,19 @@ async fn create_markdown_file(path: &Path, content: &[u8]) -> anyhow::Result<()>
     }
 
     write_result
+}
+
+async fn create_workspace_folder(path: &Path) -> anyhow::Result<()> {
+    if tokio::fs::try_exists(path).await? {
+        anyhow::bail!("The target folder already exists: {}", path.display());
+    }
+
+    if let Some(parent_path) = path.parent() {
+        tokio::fs::create_dir_all(parent_path).await?;
+    }
+
+    tokio::fs::create_dir(path).await?;
+    Ok(())
 }
 
 fn get_temporary_write_path(path: &Path) -> anyhow::Result<PathBuf> {
@@ -1249,11 +1379,12 @@ mod tests {
     };
 
     use super::{
-        add_and_activate_workspace_in_registry, create_markdown_file, delete_markdown_file,
-        derive_markdown_title, find_first_markdown_heading, get_temporary_write_path,
-        get_workspace_relative_markdown_path, load_or_create_workspace_registry,
-        move_file_without_overwrite, read_markdown_file, remove_workspace_from_registry,
-        rename_workspace_in_registry, run_locked_workspace_registry_mutation, scan_markdown_files,
+        add_and_activate_workspace_in_registry, create_markdown_file, create_workspace_folder,
+        delete_markdown_file, derive_markdown_title, find_first_markdown_heading,
+        get_temporary_write_path, get_workspace_relative_markdown_path,
+        load_or_create_workspace_registry, move_file_without_overwrite, read_markdown_file,
+        remove_workspace_from_registry, rename_workspace_in_registry,
+        run_locked_workspace_registry_mutation, scan_markdown_files, scan_workspace_folders,
         system_time_to_unix_ms, validate_markdown_path, write_markdown_file,
         WorkspaceRegistryMutationLock,
     };
@@ -1657,6 +1788,44 @@ mod tests {
     }
 
     #[test]
+    fn scans_empty_workspace_folders_and_ignores_hidden_directories() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("scans-empty-workspace-folders");
+            let empty_folder_path = workspace_dir.join("Projects").join("Ideas");
+            let hidden_folder_path = workspace_dir.join(".obsidian");
+            let note_path = workspace_dir.join("Projects").join("Plan.md");
+            tokio::fs::create_dir_all(&empty_folder_path).await?;
+            tokio::fs::create_dir_all(&hidden_folder_path).await?;
+            tokio::fs::write(&note_path, "# Plan").await?;
+
+            let folders = scan_workspace_folders(&workspace_dir).await?;
+
+            assert_eq!(folders, vec!["Projects", "Projects/Ideas"]);
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace folder scan should succeed");
+    }
+
+    #[test]
+    fn scans_folders_that_only_contain_non_markdown_files() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("scans-asset-only-folders");
+            let asset_folder_path = workspace_dir.join("Projects").join("Assets");
+            let asset_path = asset_folder_path.join("logo.png");
+            tokio::fs::create_dir_all(&asset_folder_path).await?;
+            tokio::fs::write(&asset_path, "png").await?;
+
+            let folders = scan_workspace_folders(&workspace_dir).await?;
+
+            assert_eq!(folders, vec!["Projects", "Projects/Assets"]);
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("asset-only folder scan should succeed");
+    }
+
+    #[test]
     fn reads_markdown_file_content() {
         run_async(async {
             let workspace_dir = unique_test_dir("reads-markdown-file-content");
@@ -1740,6 +1909,39 @@ mod tests {
             anyhow::Ok(())
         })
         .expect("Markdown create collision test should run");
+    }
+
+    #[test]
+    fn creates_new_workspace_folders_without_overwriting_existing_paths() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("creates-new-workspace-folders");
+            let folder_path = workspace_dir.join("Projects").join("Ideas");
+
+            create_workspace_folder(&folder_path).await?;
+
+            assert!(tokio::fs::try_exists(&folder_path).await?);
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace folder create should succeed");
+    }
+
+    #[test]
+    fn rejects_new_workspace_folders_when_the_target_exists() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("rejects-existing-folder-create-target");
+            let folder_path = workspace_dir.join("Projects").join("Ideas");
+            tokio::fs::create_dir_all(&folder_path).await?;
+
+            let error = create_workspace_folder(&folder_path)
+                .await
+                .expect_err("existing folder target should be rejected");
+
+            assert!(error.to_string().contains("already exists"));
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("workspace folder create collision test should run");
     }
 
     #[test]
