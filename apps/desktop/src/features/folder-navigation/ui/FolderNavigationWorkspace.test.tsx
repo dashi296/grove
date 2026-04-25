@@ -14,6 +14,7 @@ import {
   FolderNavigationWorkspaceContent,
   NavigationPane,
   getFolderNavigationWorkspaceClassName,
+  getInitialNoteContent,
   getScanStateWithoutActiveWorkspace,
   getWorkspaceSwitchBlockedReason,
   getWorkspaceViewPhase,
@@ -38,6 +39,12 @@ describe("FolderNavigationWorkspaceContent", () => {
     expect(markup).toContain("Loading workspace");
     expect(markup).not.toContain("Create note");
     expect(markup).not.toContain("folder-navigation__navigation");
+  });
+});
+
+describe("getInitialNoteContent", () => {
+  it("creates new notes with an empty body", () => {
+    expect(getInitialNoteContent()).toBe("");
   });
 });
 
@@ -80,11 +87,9 @@ describe("NavigationPane", () => {
         selectedNoteId="note-plan"
         scanState={{ status: "ready", errorMessage: null }}
         createState={{ status: "idle", errorMessage: null }}
-        createTitle=""
         searchQuery=""
         searchIndexState={{ status: "ready" }}
         restrictSearchToSelectedFolder={false}
-        onCreateTitleChange={() => {}}
         onSearchQueryChange={() => {}}
         onRestrictSearchToSelectedFolderChange={() => {}}
         onCreateNote={() => {}}
@@ -117,6 +122,13 @@ describe("NavigationPane", () => {
     expect(markup).toContain("Grove");
     expect(markup).toContain("Plan");
     expect(markup).not.toContain("Journal");
+  });
+
+  it("creates notes without showing a separate title input", () => {
+    const markup = renderNavigationPaneMarkup();
+
+    expect(markup).toContain("Create note");
+    expect(markup).not.toContain("create-note-title");
   });
 
   it("places the workspace switcher in the Library column", () => {
@@ -546,6 +558,7 @@ describe("ActivePane", () => {
         onMoveSelectedNote={() => {
           throw new Error("not implemented in test");
         }}
+        onCreateFolder={() => Promise.resolve()}
         onRenameSelectedFolder={() => {
           throw new Error("not implemented in test");
         }}
@@ -706,6 +719,7 @@ describe("ActivePane", () => {
   it("shows folder actions when the folder disclosure starts open", () => {
     const markup = renderActivePaneMarkup({ initialFolderActionsOpen: true });
 
+    expect(markup).toContain("Create folder");
     expect(markup).toContain("Rename selected folder");
     expect(markup).toContain(
       "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",

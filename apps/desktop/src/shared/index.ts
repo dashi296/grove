@@ -1,8 +1,10 @@
 export {
   addWorkspace,
   createMarkdownNote,
+  createMarkdownFolder,
   deleteMarkdownNote,
   getActiveWorkspace,
+  listMarkdownFolders,
   listWorkspaces,
   moveMarkdownFile,
   readMarkdownNote,
@@ -15,6 +17,7 @@ export {
 } from "./api/commands";
 export type {
   AddWorkspaceCommand,
+  CreateMarkdownFolderCommand,
   CreateMarkdownNoteCommand,
   DeleteMarkdownNoteCommand,
   DesktopWorkspace,

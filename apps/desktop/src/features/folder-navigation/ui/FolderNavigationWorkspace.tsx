@@ -24,8 +24,10 @@ import {
 } from "./WorkspaceControls";
 
 import {
+  createMarkdownFolder,
   createMarkdownNote,
   deleteMarkdownNote,
+  listMarkdownFolders,
   moveMarkdownFile,
   readMarkdownNote,
   refreshNoteIndexes,
@@ -33,6 +35,7 @@ import {
   writeMarkdownNote,
 } from "../../../shared";
 import {
+  addExplicitFolderToWorkspace,
   deleteSelectedNoteFromFolderWorkspace,
   getFailedOperationSteps,
   getNextPendingOperationStep,
@@ -121,11 +124,9 @@ type NoteListProps = {
   selectedNoteId: string;
   scanState: WorkspaceScanState;
   createState: NoteCreateState;
-  createTitle: string;
   searchQuery: string;
   searchIndexState: SearchIndexState;
   restrictSearchToSelectedFolder: boolean;
-  onCreateTitleChange: (title: string) => void;
   onSearchQueryChange: (value: string) => void;
   onRestrictSearchToSelectedFolderChange: (checked: boolean) => void;
   onCreateNote: () => void;
@@ -149,6 +150,7 @@ type ActivePaneProps = {
   editorNotice: string | null;
   deleteState: NoteDeleteState;
   onMoveSelectedNote: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
+  onCreateFolder: (folderName: string) => Promise<void>;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onEditContent: (content: string) => void;
   onSaveDraft: () => void;
@@ -182,6 +184,12 @@ type MoveNoteControlProps = {
 type RenameFolderControlProps = {
   selectedFolderPath: FolderScope;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
+  onOperationMessage: (message: string) => void;
+};
+
+type CreateFolderControlProps = {
+  selectedFolderPath: FolderScope;
+  onCreateFolder: (folderName: string) => Promise<void>;
   onOperationMessage: (message: string) => void;
 };
 
@@ -417,6 +425,10 @@ function getNoteDeleteErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The Markdown note could not be deleted.";
 }
 
+export function getInitialNoteContent(): string {
+  return "";
+}
+
 function getNoteIndexRefreshErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The note indexes could not be refreshed.";
 }
@@ -606,11 +618,9 @@ export function NavigationPane({
   selectedNoteId,
   scanState,
   createState,
-  createTitle,
   searchQuery,
   searchIndexState,
   restrictSearchToSelectedFolder,
-  onCreateTitleChange,
   onSearchQueryChange,
   onRestrictSearchToSelectedFolderChange,
   onCreateNote,
@@ -646,11 +656,9 @@ export function NavigationPane({
         selectedNoteId={selectedNoteId}
         scanState={scanState}
         createState={createState}
-        createTitle={createTitle}
         searchQuery={searchQuery}
         searchIndexState={searchIndexState}
         restrictSearchToSelectedFolder={restrictSearchToSelectedFolder}
-        onCreateTitleChange={onCreateTitleChange}
         onSearchQueryChange={onSearchQueryChange}
         onRestrictSearchToSelectedFolderChange={onRestrictSearchToSelectedFolderChange}
         onCreateNote={onCreateNote}
@@ -666,11 +674,9 @@ function NoteList({
   selectedNoteId,
   scanState,
   createState,
-  createTitle,
   searchQuery,
   searchIndexState,
   restrictSearchToSelectedFolder,
-  onCreateTitleChange,
   onSearchQueryChange,
   onRestrictSearchToSelectedFolderChange,
   onCreateNote,
@@ -718,21 +724,11 @@ function NoteList({
         ) : null}
       </div>
       <div className="folder-navigation__operation">
-        <label className="folder-navigation__label" htmlFor="create-note-title">
-          New note
-        </label>
-        <input
-          id="create-note-title"
-          className="folder-navigation__input"
-          value={createTitle}
-          onChange={(event) => onCreateTitleChange(event.target.value)}
-          placeholder={
-            selectedFolderPath === null
-              ? "Untitled"
-              : `Untitled in ${getFolderDisplayName(selectedFolderPath)}`
-          }
-          disabled={createState.status === "creating" || scanState.status === "loading"}
-        />
+        <p className="folder-navigation__label">New note</p>
+        <p className="folder-navigation__muted">
+          Create an untitled note in {getFolderLabel(selectedFolderPath)}. The visible title comes
+          from frontmatter or the first H1.
+        </p>
         <button
           type="button"
           className="folder-navigation__action"
@@ -881,6 +877,62 @@ function RenameFolderControl({
       <p className="folder-navigation__muted">
         Current folder: {getFolderPathLabel(selectedFolderPath)}
       </p>
+    </div>
+  );
+}
+
+function CreateFolderControl({
+  selectedFolderPath,
+  onCreateFolder,
+  onOperationMessage,
+}: CreateFolderControlProps) {
+  const [folderName, setFolderName] = useState("");
+  const [status, setStatus] = useState<"idle" | "creating">("idle");
+
+  async function createFolder(): Promise<void> {
+    const nextFolderName = folderName.trim();
+
+    if (nextFolderName === "") {
+      onOperationMessage("Enter a folder name.");
+      return;
+    }
+
+    setStatus("creating");
+
+    try {
+      await onCreateFolder(nextFolderName);
+      setFolderName("");
+      onOperationMessage(`Created ${getFolderLabel(selectedFolderPath)} folder "${nextFolderName}".`);
+    } catch (error) {
+      onOperationMessage(getErrorMessage(error));
+    } finally {
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <div className="folder-navigation__operation">
+      <label className="folder-navigation__label" htmlFor="create-folder-name">
+        Create folder
+      </label>
+      <input
+        id="create-folder-name"
+        className="folder-navigation__input"
+        value={folderName}
+        onChange={(event) => setFolderName(event.target.value)}
+        placeholder={selectedFolderPath === null ? "Ideas" : `New folder in ${selectedFolderPath}`}
+        disabled={status === "creating"}
+      />
+      <button
+        type="button"
+        className="folder-navigation__action"
+        onClick={() => {
+          void createFolder();
+        }}
+        disabled={status === "creating"}
+      >
+        {status === "creating" ? "Creating" : "Create folder"}
+      </button>
     </div>
   );
 }
@@ -1068,6 +1120,7 @@ export function ActivePane({
   editorNotice,
   deleteState,
   onMoveSelectedNote,
+  onCreateFolder,
   onRenameSelectedFolder,
   onEditContent,
   onSaveDraft,
@@ -1205,6 +1258,11 @@ export function ActivePane({
           />
         ) : null}
         <ActionDisclosure title="Folder actions" initiallyOpen={initialFolderActionsOpen}>
+          <CreateFolderControl
+            selectedFolderPath={selectedFolderPath}
+            onCreateFolder={onCreateFolder}
+            onOperationMessage={setFolderOperationMessage}
+          />
           <RenameFolderControl
             selectedFolderPath={selectedFolderPath}
             onRenameSelectedFolder={onRenameSelectedFolder}
@@ -1344,7 +1402,6 @@ export function FolderNavigationWorkspaceContent({
   const [noteEditBuffer, setNoteEditBuffer] = useState<NoteEditBuffer | null>(null);
   const [editorLoadState, setEditorLoadState] = useState<NoteEditorLoadState>({ status: "idle" });
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
-  const [createTitle, setCreateTitle] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [restrictSearchToSelectedFolder, setRestrictSearchToSelectedFolder] = useState(false);
   const [searchIndexState, setSearchIndexState] = useState<SearchIndexState>({ status: "idle" });
@@ -1656,7 +1713,7 @@ export function FolderNavigationWorkspaceContent({
     }
 
     const nextPath = createNewNotePath(
-      createTitle,
+      "",
       selectedFolderPath,
       workspaceState.notes.map((note) => note.path),
     );
@@ -1669,7 +1726,7 @@ export function FolderNavigationWorkspaceContent({
     try {
       const createdNote = await createMarkdownNote({
         path: nextPath,
-        content: "",
+        content: getInitialNoteContent(),
       });
       const [mappedNote] = mapScannedMarkdownNotes([createdNote]);
 
@@ -1695,7 +1752,6 @@ export function FolderNavigationWorkspaceContent({
         [mappedNote.id]: "",
       }));
       setSelectedNoteId(mappedNote.id);
-      setCreateTitle("");
       setCreateState({
         status: "idle",
         errorMessage: null,
@@ -1720,12 +1776,26 @@ export function FolderNavigationWorkspaceContent({
     }
   }, [
     createState.status,
-    createTitle,
     noteEditBuffer,
     scanState.status,
     selectedFolderPath,
     workspaceState.notes,
   ]);
+
+  const createFolderInSelectedFolder = useCallback(
+    async (folderName: string): Promise<void> => {
+      const nextFolderPath = normalizeFolderPath(
+        selectedFolderPath === null ? folderName : `${selectedFolderPath}/${folderName}`,
+      );
+
+      await createMarkdownFolder({
+        path: nextFolderPath,
+      });
+
+      setWorkspaceState((currentState) => addExplicitFolderToWorkspace(currentState, nextFolderPath));
+    },
+    [selectedFolderPath],
+  );
 
   function markSelectedNoteDraftSaved(buffer: NoteEditBuffer): void {
     setNoteEditBuffer((currentBuffer) => {
@@ -1888,7 +1958,10 @@ export function FolderNavigationWorkspaceContent({
 
     async function scanWorkspace(): Promise<void> {
       try {
-        const scannedNotes = await scanMarkdownWorkspace();
+        const [scannedNotes, scannedFolders] = await Promise.all([
+          scanMarkdownWorkspace(),
+          listMarkdownFolders(),
+        ]);
         const notes = mapScannedMarkdownNotes(scannedNotes);
 
         if (canceled) {
@@ -1897,7 +1970,7 @@ export function FolderNavigationWorkspaceContent({
 
         setWorkspaceState({
           notes,
-          explicitFolders: [],
+          explicitFolders: scannedFolders.map((folderPath) => normalizeFolderPath(folderPath)),
           selectedFolderPath: null,
           expandedFolderPaths: getExpandedFolderPathsForNotes(notes),
         });
@@ -2058,16 +2131,9 @@ export function FolderNavigationWorkspaceContent({
         selectedNoteId={selectedNoteId}
         scanState={scanState}
         createState={createState}
-        createTitle={createTitle}
         searchQuery={searchQuery}
         searchIndexState={searchIndexState}
         restrictSearchToSelectedFolder={restrictSearchToSelectedFolder}
-        onCreateTitleChange={(title) => {
-          setCreateTitle(title);
-          if (createState.errorMessage !== null) {
-            setCreateState({ status: "idle", errorMessage: null });
-          }
-        }}
         onSearchQueryChange={setSearchQuery}
         onRestrictSearchToSelectedFolderChange={setRestrictSearchToSelectedFolder}
         onCreateNote={() => {
@@ -2092,6 +2158,7 @@ export function FolderNavigationWorkspaceContent({
         editorNotice={editorNotice}
         deleteState={deleteState}
         onMoveSelectedNote={moveSelectedNote}
+        onCreateFolder={createFolderInSelectedFolder}
         onRenameSelectedFolder={renameSelectedFolder}
         onEditContent={editSelectedNoteContent}
         onSaveDraft={() => {

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createMarkdownNote,
+  createMarkdownFolder,
   deleteMarkdownNote,
   addWorkspace,
+  listMarkdownFolders,
   getActiveWorkspace,
   listWorkspaces,
   moveMarkdownFile,
@@ -83,6 +85,16 @@ describe("desktop command wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("scan_markdown_workspace", {});
   });
 
+  it("invokes the Markdown folder scan command", async () => {
+    invokeMock.mockResolvedValue(["Projects/Grove", "Projects/Grove/Ideas"]);
+
+    await expect(listMarkdownFolders()).resolves.toStrictEqual([
+      "Projects/Grove",
+      "Projects/Grove/Ideas",
+    ]);
+    expect(invokeMock).toHaveBeenCalledWith("scan_markdown_folders", {});
+  });
+
   it("invokes the Markdown note create command", async () => {
     invokeMock.mockResolvedValue({
       path: "Projects/Grove/Plan.md",
@@ -106,6 +118,20 @@ describe("desktop command wrappers", () => {
       note: {
         path: "Projects/Grove/Plan.md",
         content: "",
+      },
+    });
+  });
+
+  it("invokes the Markdown folder create command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    await createMarkdownFolder({
+      path: "Projects/Grove/Ideas",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("create_markdown_folder", {
+      folder: {
+        path: "Projects/Grove/Ideas",
       },
     });
   });
@@ -250,6 +276,12 @@ describe("desktop command wrappers", () => {
     invokeMock.mockResolvedValue([{ path: "/Users/me/Notes/Plan.md", title: "Plan" }]);
 
     await expect(scanMarkdownWorkspace()).rejects.toThrow("invalid note list");
+  });
+
+  it("rejects invalid Markdown folder scan results", async () => {
+    invokeMock.mockResolvedValue(["Projects/Grove", 123]);
+
+    await expect(listMarkdownFolders()).rejects.toThrow("invalid folder list");
   });
 
   it("rejects non-finite Markdown workspace scan timestamps", async () => {
