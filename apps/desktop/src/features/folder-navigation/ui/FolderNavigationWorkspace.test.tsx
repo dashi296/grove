@@ -13,6 +13,7 @@ import {
   ActivePane,
   FolderNavigationWorkspaceContent,
   NavigationPane,
+  canRenameSelectedFolder,
   getFolderNavigationWorkspaceClassName,
   getInitialNoteContent,
   getScanStateWithoutActiveWorkspace,
@@ -45,6 +46,25 @@ describe("FolderNavigationWorkspaceContent", () => {
 describe("getInitialNoteContent", () => {
   it("creates new notes with an empty body", () => {
     expect(getInitialNoteContent()).toBe("");
+  });
+});
+
+describe("canRenameSelectedFolder", () => {
+  it("requires at least one Markdown note in the selected folder scope", () => {
+    expect(
+      canRenameSelectedFolder(
+        [
+          {
+            id: "note-plan",
+            path: normalizeNoteFilePath("Projects/Grove/Plan.md"),
+            title: "Plan",
+            tags: [],
+            updatedLabel: "Apr 19",
+          },
+        ],
+        normalizeFolderPath("Projects/Grove/Ideas"),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -723,6 +743,25 @@ describe("ActivePane", () => {
     expect(markup).toContain("Rename selected folder");
     expect(markup).toContain(
       "Path changes refresh the folder tree and note list immediately. File and index work runs in the background.",
+    );
+  });
+
+  it("disables folder rename when the selected folder has no Markdown notes", () => {
+    const markup = renderActivePaneMarkup({
+      notes: [],
+      folderOptions: [],
+      selectedFolderPath: normalizeFolderPath("Projects/Grove/Ideas"),
+      selectedNoteId: "",
+      selectedNoteLinks: [],
+      selectedNoteBacklinks: [],
+      noteTitlesById: new Map(),
+      initialFolderActionsOpen: true,
+    });
+
+    expect(markup).toContain("Rename selected folder");
+    expect(markup).toContain("Only folders with Markdown notes can be renamed right now.");
+    expect(markup).toMatch(
+      /<button type="button" class="folder-navigation__action" disabled="">Rename folder<\/button>/,
     );
   });
 

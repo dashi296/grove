@@ -183,6 +183,7 @@ type MoveNoteControlProps = {
 
 type RenameFolderControlProps = {
   selectedFolderPath: FolderScope;
+  canRename: boolean;
   onRenameSelectedFolder: (targetFolderPath: FolderScope) => FolderWorkspaceMutation;
   onOperationMessage: (message: string) => void;
 };
@@ -290,6 +291,15 @@ export function getWorkspaceSwitchBlockedReason(
 
 function getFolderPathLabel(folderPath: FolderScope): string {
   return folderPath === null ? "Workspace root" : folderPath;
+}
+
+export function canRenameSelectedFolder(
+  notes: readonly NoteListItem[],
+  selectedFolderPath: FolderScope,
+): boolean {
+  return (
+    selectedFolderPath !== null && notes.some((note) => isNoteInFolderScope(note.path, selectedFolderPath))
+  );
 }
 
 function flattenFolderTree(folderTree: readonly FolderTreeNode[]): FolderOption[] {
@@ -825,6 +835,7 @@ function MoveNoteControl({
 
 function RenameFolderControl({
   selectedFolderPath,
+  canRename,
   onRenameSelectedFolder,
   onOperationMessage,
 }: RenameFolderControlProps) {
@@ -864,19 +875,24 @@ function RenameFolderControl({
         className="folder-navigation__input"
         value={renameTargetPath}
         onChange={(event) => setRenameTargetPath(event.target.value)}
-        disabled={selectedFolderPath === null}
+        disabled={!canRename}
       />
       <button
         type="button"
         className="folder-navigation__action"
         onClick={renameSelectedFolder}
-        disabled={selectedFolderPath === null}
+        disabled={!canRename}
       >
         Rename folder
       </button>
       <p className="folder-navigation__muted">
         Current folder: {getFolderPathLabel(selectedFolderPath)}
       </p>
+      {canRename ? null : (
+        <p className="folder-navigation__muted">
+          Only folders with Markdown notes can be renamed right now.
+        </p>
+      )}
     </div>
   );
 }
@@ -1144,6 +1160,7 @@ export function ActivePane({
   initialFolderActionsOpen = false,
 }: ActivePaneProps) {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? notes[0];
+  const selectedFolderCanRename = canRenameSelectedFolder(notes, selectedFolderPath);
   const [noteOperationMessage, setNoteOperationMessage] = useState<string>(defaultOperationMessage);
   const [folderOperationMessage, setFolderOperationMessage] =
     useState<string>(defaultOperationMessage);
@@ -1265,6 +1282,7 @@ export function ActivePane({
           />
           <RenameFolderControl
             selectedFolderPath={selectedFolderPath}
+            canRename={selectedFolderCanRename}
             onRenameSelectedFolder={onRenameSelectedFolder}
             onOperationMessage={setFolderOperationMessage}
           />
@@ -1585,6 +1603,10 @@ export function FolderNavigationWorkspaceContent({
   function renameSelectedFolder(targetFolderPath: FolderScope): FolderWorkspaceMutation {
     if (isNoteEditBufferBlockingWorkspaceChange(noteEditBuffer)) {
       throw new Error("Save or discard the current draft before renaming folders.");
+    }
+
+    if (!canRenameSelectedFolder(workspaceState.notes, selectedFolderPath)) {
+      throw new Error("Only folders with Markdown notes can be renamed right now.");
     }
 
     if (selectedFolderPath === null) {

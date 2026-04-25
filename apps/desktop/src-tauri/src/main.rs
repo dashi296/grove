@@ -989,7 +989,6 @@ async fn scan_workspace_folders(workspace_root: &Path) -> anyhow::Result<Vec<Str
 
     while let Some(directory) = pending_dirs.pop() {
         let mut entries = tokio::fs::read_dir(&directory).await?;
-        let mut has_visible_entries = false;
 
         while let Some(entry) = entries.next_entry().await? {
             let file_name = entry.file_name();
@@ -999,14 +998,12 @@ async fn scan_workspace_folders(workspace_root: &Path) -> anyhow::Result<Vec<Str
                 continue;
             }
 
-            has_visible_entries = true;
-
             if entry.file_type().await?.is_dir() {
                 pending_dirs.push(entry.path());
             }
         }
 
-        if directory != workspace_root && !has_visible_entries {
+        if directory != workspace_root {
             let relative_path = directory.strip_prefix(workspace_root)?;
             folders.push(relative_path_to_workspace_path(relative_path)?);
         }
@@ -1803,11 +1800,29 @@ mod tests {
 
             let folders = scan_workspace_folders(&workspace_dir).await?;
 
-            assert_eq!(folders, vec!["Projects/Ideas"]);
+            assert_eq!(folders, vec!["Projects", "Projects/Ideas"]);
             tokio::fs::remove_dir_all(&workspace_dir).await?;
             anyhow::Ok(())
         })
         .expect("workspace folder scan should succeed");
+    }
+
+    #[test]
+    fn scans_folders_that_only_contain_non_markdown_files() {
+        run_async(async {
+            let workspace_dir = unique_test_dir("scans-asset-only-folders");
+            let asset_folder_path = workspace_dir.join("Projects").join("Assets");
+            let asset_path = asset_folder_path.join("logo.png");
+            tokio::fs::create_dir_all(&asset_folder_path).await?;
+            tokio::fs::write(&asset_path, "png").await?;
+
+            let folders = scan_workspace_folders(&workspace_dir).await?;
+
+            assert_eq!(folders, vec!["Projects", "Projects/Assets"]);
+            tokio::fs::remove_dir_all(&workspace_dir).await?;
+            anyhow::Ok(())
+        })
+        .expect("asset-only folder scan should succeed");
     }
 
     #[test]
